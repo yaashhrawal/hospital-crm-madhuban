@@ -18,7 +18,7 @@ app.use(express.static(path.join(__dirname, '../dist')));
 
 // Azure PostgreSQL connection
 const pool = new Pool({
-  host: process.env.AZURE_DB_HOST || 'valantdb.postgres.database.azure.com',
+  host: process.env.AZURE_DB_HOST || 'sevasangraha.postgres.database.azure.com',
   port: process.env.AZURE_DB_PORT || 5432,
   database: process.env.AZURE_DB_NAME || 'postgres',
   user: process.env.AZURE_DB_USER || 'divyansh04',
@@ -64,7 +64,7 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-    
+
     const result = await pool.query(
       'SELECT * FROM users WHERE email = $1 AND is_active = true',
       [email]
@@ -75,7 +75,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const user = result.rows[0];
-    
+
     // For admin user with temp password, accept 'admin123'
     if (email === 'admin@hospital.com' && password === 'admin123') {
       const token = jwt.sign(
@@ -83,7 +83,7 @@ app.post('/api/auth/login', async (req, res) => {
         JWT_SECRET,
         { expiresIn: '24h' }
       );
-      
+
       return res.json({
         token,
         user: {
@@ -98,7 +98,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // For other users, check bcrypt password
     const validPassword = await bcrypt.compare(password, user.password_hash);
-    
+
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -134,7 +134,7 @@ app.post('/api/auth/register', authenticateToken, async (req, res) => {
     }
 
     const { email, password, first_name, last_name, role } = req.body;
-    
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
@@ -163,11 +163,61 @@ app.post('/api/auth/register', authenticateToken, async (req, res) => {
 app.get('/api/patients', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM patients WHERE is_active = true ORDER BY created_at DESC'
+      'SELECT * FROM patients WHERE (is_active = true OR is_active IS NULL) ORDER BY created_at DESC'
     );
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching patients:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get patients by date range
+app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: 'Start date and end date are required' });
+    }
+
+    const result = await pool.query(
+      `SELECT * FROM patients 
+       WHERE date_of_entry >= $1 AND date_of_entry <= $2 
+       AND (is_active = true OR is_active IS NULL)
+       ORDER BY date_of_entry DESC`,
+      [start_date + ' 00:00:00', end_date + ' 23:59:59']
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching patients by date range:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get patients by exact date
+app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { limit } = req.query;
+
+    let query = `SELECT * FROM patients 
+                 WHERE date_of_entry::date = $1 
+                 AND (is_active = true OR is_active IS NULL)
+                 ORDER BY date_of_entry DESC`;
+
+    const params = [date];
+
+    if (limit) {
+      query += ` LIMIT $2`;
+      params.push(limit);
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching patients by date:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -180,11 +230,11 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
       'SELECT * FROM patients WHERE id = $1',
       [id]
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Patient not found' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching patient:', error);
@@ -218,13 +268,13 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
       `INSERT INTO patients (
         patient_id, first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
-        allergies, current_medications, blood_group, notes, date_of_entry, created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        allergies, current_medications, blood_group, notes, date_of_entry, created_by, is_active
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *`,
       [
         patient_id, first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
-        allergies, current_medications, blood_group, notes, date_of_entry, req.user.id
+        allergies, current_medications, blood_group, notes, date_of_entry, req.user.id, true
       ]
     );
 
@@ -240,26 +290,123 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
-    
+
     // Build dynamic update query
     const setClause = Object.keys(updates)
       .map((key, index) => `${key} = $${index + 2}`)
       .join(', ');
-    
+
     const values = [id, ...Object.values(updates)];
-    
+
     const result = await pool.query(
       `UPDATE patients SET ${setClause} WHERE id = $1 RETURNING *`,
       values
     );
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Patient not found' });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating patient:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get patients by date range
+app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+
+    if (!start_date || !end_date) {
+      return res.status(400).json({ error: 'Start date and end date are required' });
+    }
+
+    const result = await pool.query(
+      `SELECT * FROM patients 
+       WHERE date_of_entry >= $1 AND date_of_entry <= $2 
+       AND is_active = true 
+       ORDER BY date_of_entry DESC`,
+      [start_date + ' 00:00:00', end_date + ' 23:59:59']
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching patients by date range:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get patients by exact date
+app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const { limit } = req.query;
+
+    let query = `SELECT * FROM patients 
+                 WHERE date_of_entry::date = $1 
+                 AND is_active = true 
+                 ORDER BY date_of_entry DESC`;
+
+    const params = [date];
+
+    if (limit) {
+      query += ` LIMIT $2`;
+      params.push(limit);
+    }
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching patients by date:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get patient refunds
+app.get('/api/patient_refunds', authenticateToken, async (req, res) => {
+  try {
+    const { start_date, end_date } = req.query;
+    let query = `
+      SELECT r.*, 
+             json_build_object(
+               'id', p.id,
+               'patient_id', p.patient_id,
+               'first_name', p.first_name,
+               'last_name', p.last_name,
+               'age', p.age,
+               'gender', p.gender,
+               'patient_tag', p.patient_tag,
+               'assigned_doctor', p.assigned_doctor,
+               'assigned_department', p.assigned_department,
+               'date_of_entry', p.date_of_entry
+             ) as patient
+      FROM patient_refunds r
+      LEFT JOIN patients p ON r.patient_id = p.patient_id
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramCount = 1;
+
+    if (start_date) {
+      query += ` AND r.created_at >= $${paramCount}`;
+      params.push(start_date);
+      paramCount++;
+    }
+
+    if (end_date) {
+      query += ` AND r.created_at <= $${paramCount}`;
+      params.push(end_date);
+      paramCount++;
+    }
+
+    query += ' ORDER BY r.created_at DESC';
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching refunds:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -555,10 +702,619 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
   }
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'Hospital CRM API is running' });
+// ==================== APPOINTMENT ROUTES ====================
+
+// Get all appointments
+app.get('/api/appointments', authenticateToken, async (req, res) => {
+  try {
+    const { doctor_id, patient_id, date, status } = req.query;
+    let query = 'SELECT * FROM appointments WHERE 1=1';
+    const params = [];
+    let paramCount = 1;
+
+    if (doctor_id) {
+      query += ` AND doctor_id = $${paramCount} `;
+      params.push(doctor_id);
+      paramCount++;
+    }
+    if (patient_id) {
+      query += ` AND patient_id = $${paramCount} `;
+      params.push(patient_id);
+      paramCount++;
+    }
+    if (date) {
+      query += ` AND DATE(scheduled_at) = $${paramCount} `;
+      params.push(date);
+      paramCount++;
+    }
+    if (status) {
+      query += ` AND status = $${paramCount} `;
+      params.push(status);
+      paramCount++;
+    }
+
+    query += ' ORDER BY scheduled_at ASC';
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching appointments:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
+
+// Create appointment
+app.post('/api/appointments', authenticateToken, async (req, res) => {
+  try {
+    const {
+      patient_id, doctor_id, department_id, scheduled_at, duration,
+      status, reason, appointment_type, notes
+    } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO appointments(
+  patient_id, doctor_id, department_id, scheduled_at, duration,
+  status, reason, appointment_type, notes, created_by
+) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING * `,
+      [
+        patient_id, doctor_id, department_id, scheduled_at, duration,
+        status || 'SCHEDULED', reason, appointment_type, notes, req.user.id
+      ]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating appointment:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update appointment
+app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    const setClause = Object.keys(updates)
+      .map((key, index) => `${key} = $${index + 2} `)
+      .join(', ');
+    const values = [id, ...Object.values(updates)];
+
+    const result = await pool.query(
+      `UPDATE appointments SET ${setClause} WHERE id = $1 RETURNING * `,
+      values
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Appointment not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating appointment:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== DEPARTMENT ROUTES ====================
+
+app.get('/api/departments', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM departments ORDER BY name');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching departments:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== USER ROUTES ====================
+
+app.get('/api/users', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, email, first_name, last_name, role, is_active, created_at FROM users ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== GENERIC CRUD ROUTES (for other tables) ====================
+
+// Helper for generic CRUD
+const createGenericRoutes = (tableName) => {
+  // Get all
+  app.get(`/ api / ${tableName} `, authenticateToken, async (req, res) => {
+    try {
+      const result = await pool.query(`SELECT * FROM ${tableName} ORDER BY created_at DESC`);
+      res.json(result.rows);
+    } catch (error) {
+      console.error(`Error fetching ${tableName}: `, error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Create
+  app.post(`/ api / ${tableName} `, authenticateToken, async (req, res) => {
+    try {
+      const keys = Object.keys(req.body);
+      const values = Object.values(req.body);
+      const placeholders = keys.map((_, i) => `$${i + 1} `).join(', ');
+
+      const result = await pool.query(
+        `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES(${placeholders}) RETURNING * `,
+        values
+      );
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error(`Error creating ${tableName}: `, error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Update
+  app.put(`/ api / ${tableName}/:id`, authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      const setClause = Object.keys(updates)
+        .map((key, index) => `${key} = $${index + 2}`)
+        .join(', ');
+      const values = [id, ...Object.values(updates)];
+
+      const result = await pool.query(
+        `UPDATE ${tableName} SET ${setClause} WHERE id = $1 RETURNING *`,
+        values
+      );
+
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+      res.json(result.rows[0]);
+    } catch (error) {
+      console.error(`Error updating ${tableName}:`, error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+
+  // Delete
+  app.delete(`/api/${tableName}/:id`, authenticateToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await pool.query(`DELETE FROM ${tableName} WHERE id = $1 RETURNING id`, [id]);
+      if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+      res.json({ message: 'Deleted successfully' });
+    } catch (error) {
+      console.error(`Error deleting ${tableName}:`, error);
+      res.status(500).json({ error: 'Server error' });
+    }
+  });
+};
+
+// Initialize generic routes for simple tables
+['audit_logs', 'custom_services', 'daily_expenses', 'medicines', 'email_logs', 'hospitals'].forEach(table => {
+  createGenericRoutes(table);
+});
+
+// =====================================================================
+// BILLING API ENDPOINTS
+// =====================================================================
+
+// Initialize billing tables (run once)
+app.post('/api/billing/init-tables', authenticateToken, async (req, res) => {
+  try {
+    // Create OPD bills table (without foreign key - patients table doesn't have proper constraints)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS opd_bills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bill_id VARCHAR(50) UNIQUE NOT NULL,
+        patient_id UUID,
+        patient_name VARCHAR(255) NOT NULL,
+        doctor_id UUID,
+        doctor_name VARCHAR(255),
+        services JSONB DEFAULT '[]',
+        consultation_fee DECIMAL(10,2) DEFAULT 0,
+        investigation_charges DECIMAL(10,2) DEFAULT 0,
+        medicine_charges DECIMAL(10,2) DEFAULT 0,
+        other_charges DECIMAL(10,2) DEFAULT 0,
+        discount DECIMAL(10,2) DEFAULT 0,
+        total_amount DECIMAL(10,2) NOT NULL,
+        status VARCHAR(20) DEFAULT 'PENDING',
+        bill_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        payment_mode VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create IPD bills table (without foreign key)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ipd_bills (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        bill_id VARCHAR(50) UNIQUE NOT NULL,
+        patient_id UUID,
+        patient_name VARCHAR(255) NOT NULL,
+        admission_date DATE,
+        discharge_date DATE,
+        admission_charges DECIMAL(10,2) DEFAULT 0,
+        stay_segments JSONB DEFAULT '[]',
+        services JSONB DEFAULT '[]',
+        total_stay_charges DECIMAL(10,2) DEFAULT 0,
+        total_service_charges DECIMAL(10,2) DEFAULT 0,
+        discount DECIMAL(10,2) DEFAULT 0,
+        total_amount DECIMAL(10,2) NOT NULL,
+        status VARCHAR(20) DEFAULT 'PENDING',
+        bill_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        payment_mode VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create indexes
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_opd_bills_patient ON opd_bills(patient_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_opd_bills_date ON opd_bills(bill_date)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_ipd_bills_patient ON ipd_bills(patient_id)');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_ipd_bills_date ON ipd_bills(bill_date)');
+
+    res.json({ message: 'Billing tables initialized successfully' });
+  } catch (error) {
+    console.error('Error initializing billing tables:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all OPD bills
+app.get('/api/billing/opd', authenticateToken, async (req, res) => {
+  try {
+    const { patient_id, bill_type, payment_status, date_from, date_to } = req.query;
+
+    let query = 'SELECT * FROM opd_bills WHERE 1=1';
+    const params = [];
+    let paramCount = 1;
+
+    if (patient_id) {
+      query += ` AND patient_id = $${paramCount++}`;
+      params.push(patient_id);
+    }
+    if (payment_status) {
+      query += ` AND status = $${paramCount++}`;
+      params.push(payment_status);
+    }
+    if (date_from) {
+      query += ` AND bill_date >= $${paramCount++}`;
+      params.push(date_from);
+    }
+    if (date_to) {
+      query += ` AND bill_date <= $${paramCount++}`;
+      params.push(date_to);
+    }
+
+    query += ' ORDER BY bill_date DESC';
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching OPD bills:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create OPD bill
+app.post('/api/billing/opd', authenticateToken, async (req, res) => {
+  try {
+    const {
+      bill_id, patient_id, patient_name, doctor_id, doctor_name,
+      services, consultation_fee, investigation_charges, medicine_charges,
+      other_charges, discount, total_amount, status, payment_mode
+    } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO opd_bills (
+        bill_id, patient_id, patient_name, doctor_id, doctor_name,
+        services, consultation_fee, investigation_charges, medicine_charges,
+        other_charges, discount, total_amount, status, payment_mode
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [bill_id, patient_id, patient_name, doctor_id, doctor_name,
+        JSON.stringify(services || []), consultation_fee || 0, investigation_charges || 0,
+        medicine_charges || 0, other_charges || 0, discount || 0,
+        total_amount, status || 'PAID', payment_mode]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating OPD bill:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update OPD bill
+app.put('/api/billing/opd/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (updates.services) {
+      updates.services = JSON.stringify(updates.services);
+    }
+
+    const setClause = Object.keys(updates)
+      .map((key, index) => `${key} = $${index + 2}`)
+      .join(', ');
+    const values = [id, ...Object.values(updates)];
+
+    const result = await pool.query(
+      `UPDATE opd_bills SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'OPD bill not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating OPD bill:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete OPD bill
+app.delete('/api/billing/opd/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM opd_bills WHERE id = $1 RETURNING id', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'OPD bill not found' });
+    }
+
+    res.json({ message: 'OPD bill deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting OPD bill:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Generate next OPD bill ID
+app.get('/api/billing/opd/next-id', authenticateToken, async (req, res) => {
+  try {
+    const year = new Date().getFullYear();
+    const result = await pool.query(
+      'SELECT bill_id FROM opd_bills WHERE bill_id LIKE $1 ORDER BY bill_id DESC LIMIT 1',
+      [`OPD-${year}-%`]
+    );
+
+    let sequence = 1;
+    if (result.rows.length > 0) {
+      const lastId = result.rows[0].bill_id;
+      const lastSequence = parseInt(lastId.split('-')[2]);
+      sequence = lastSequence + 1;
+    }
+
+    const billId = `OPD-${year}-${String(sequence).padStart(4, '0')}`;
+    res.json({ billId });
+  } catch (error) {
+    console.error('Error generating OPD bill ID:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all IPD bills
+app.get('/api/billing/ipd', authenticateToken, async (req, res) => {
+  try {
+    const { patient_id, bill_type, payment_status, date_from, date_to } = req.query;
+
+    let query = 'SELECT * FROM ipd_bills WHERE 1=1';
+    const params = [];
+    let paramCount = 1;
+
+    if (patient_id) {
+      query += ` AND patient_id = $${paramCount++}`;
+      params.push(patient_id);
+    }
+    if (payment_status) {
+      query += ` AND status = $${paramCount++}`;
+      params.push(payment_status);
+    }
+    if (date_from) {
+      query += ` AND bill_date >= $${paramCount++}`;
+      params.push(date_from);
+    }
+    if (date_to) {
+      query += ` AND bill_date <= $${paramCount++}`;
+      params.push(date_to);
+    }
+
+    query += ' ORDER BY bill_date DESC';
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching IPD bills:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create IPD bill
+app.post('/api/billing/ipd', authenticateToken, async (req, res) => {
+  try {
+    const {
+      bill_id, patient_id, patient_name, admission_date, discharge_date,
+      admission_charges, stay_segments, services, total_stay_charges,
+      total_service_charges, discount, total_amount, status, payment_mode
+    } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO ipd_bills (
+        bill_id, patient_id, patient_name, admission_date, discharge_date,
+        admission_charges, stay_segments, services, total_stay_charges,
+        total_service_charges, discount, total_amount, status, payment_mode
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      RETURNING *`,
+      [bill_id, patient_id, patient_name, admission_date, discharge_date,
+        admission_charges || 0, JSON.stringify(stay_segments || []),
+        JSON.stringify(services || []), total_stay_charges || 0,
+        total_service_charges || 0, discount || 0, total_amount,
+        status || 'PAID', payment_mode]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating IPD bill:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update IPD bill
+app.put('/api/billing/ipd/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    if (updates.stay_segments) {
+      updates.stay_segments = JSON.stringify(updates.stay_segments);
+    }
+    if (updates.services) {
+      updates.services = JSON.stringify(updates.services);
+    }
+
+    const setClause = Object.keys(updates)
+      .map((key, index) => `${key} = $${index + 2}`)
+      .join(', ');
+    const values = [id, ...Object.values(updates)];
+
+    const result = await pool.query(
+      `UPDATE ipd_bills SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+      values
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'IPD bill not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating IPD bill:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete IPD bill
+app.delete('/api/billing/ipd/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM ipd_bills WHERE id = $1 RETURNING id', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'IPD bill not found' });
+    }
+
+    res.json({ message: 'IPD bill deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting IPD bill:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Generate next IPD bill ID
+app.get('/api/billing/ipd/next-id', authenticateToken, async (req, res) => {
+  try {
+    const year = new Date().getFullYear();
+    const result = await pool.query(
+      'SELECT bill_id FROM ipd_bills WHERE bill_id LIKE $1 ORDER BY bill_id DESC LIMIT 1',
+      [`IPD-${year}-%`]
+    );
+
+    let sequence = 1;
+    if (result.rows.length > 0) {
+      const lastId = result.rows[0].bill_id;
+      const lastSequence = parseInt(lastId.split('-')[2]);
+      sequence = lastSequence + 1;
+    }
+
+    const billId = `IPD-${year}-${String(sequence).padStart(4, '0')}`;
+    res.json({ billId });
+  } catch (error) {
+    console.error('Error generating IPD bill ID:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get recent bills (combined OPD + IPD)
+app.get('/api/billing/recent', authenticateToken, async (req, res) => {
+  try {
+    const opdResult = await pool.query(
+      `SELECT id, bill_id as "billId", patient_name as "patientName", 
+              'OPD' as type, total_amount as amount, status, bill_date as date
+       FROM opd_bills 
+       ORDER BY bill_date DESC 
+       LIMIT 50`
+    );
+
+    const ipdResult = await pool.query(
+      `SELECT id, bill_id as "billId", patient_name as "patientName", 
+              'IPD' as type, total_amount as amount, status, bill_date as date
+       FROM ipd_bills 
+       ORDER BY bill_date DESC 
+       LIMIT 50`
+    );
+
+    const combined = [...opdResult.rows, ...ipdResult.rows]
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 100);
+
+    res.json(combined);
+  } catch (error) {
+    console.error('Error fetching recent bills:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get billing summary
+app.get('/api/billing/summary', authenticateToken, async (req, res) => {
+  try {
+    // Get OPD stats
+    const opdStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'PAID'), 0) as revenue
+      FROM opd_bills
+    `);
+
+    // Get IPD stats
+    const ipdStats = await pool.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'PAID'), 0) as revenue
+      FROM ipd_bills
+    `);
+
+    const opdData = opdStats.rows[0];
+    const ipdData = ipdStats.rows[0];
+
+    res.json({
+      totalRevenue: parseFloat(opdData.revenue) + parseFloat(ipdData.revenue),
+      opdBills: parseInt(opdData.total),
+      ipdBills: parseInt(ipdData.total),
+      pendingBills: parseInt(opdData.pending) + parseInt(ipdData.pending),
+      totalDeposits: parseFloat(opdData.revenue) + parseFloat(ipdData.revenue)
+    });
+  } catch (error) {
+    console.error('Error fetching billing summary:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear all bills (development/testing only)
+app.delete('/api/billing/clear-all', authenticateToken, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM opd_bills');
+    await pool.query('DELETE FROM ipd_bills');
+    res.json({ message: 'All bills cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing bills:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // Catch-all handler: send back React's index.html file for client-side routing
 app.get('*', (req, res) => {

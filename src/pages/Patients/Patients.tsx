@@ -35,7 +35,7 @@ export const Patients: React.FC = () => {
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
 
-  // Load patients from Supabase on component mount
+  // Load patients from backend on component mount
   useEffect(() => {
     loadPatients();
   }, []);
@@ -43,7 +43,7 @@ export const Patients: React.FC = () => {
   const loadPatients = async () => {
     setIsLoading(true);
     try {
-      console.log('🔍 Loading patients from Supabase...');
+      console.log('🔍 Loading patients from backend API...');
       const data = await dataService.getPatients();
       console.log('✅ Patients loaded:', data?.length || 0);
       setPatients(data || []);
@@ -57,12 +57,25 @@ export const Patients: React.FC = () => {
 
   const filteredPatients = useMemo(() => {
     return patients.filter(patient => {
-      const patientDate = new Date(patient.date_of_entry || patient.created_at || patient.createdAt);
-      if (startDate && patientDate < startDate) {
-        return false;
+      // Get patient date - prefer date_of_entry, fallback to created_at
+      const patientDateStr = patient.date_of_entry || patient.created_at || patient.createdAt;
+      if (!patientDateStr) return true; // No date, include patient
+
+      // Parse date and convert to local YYYY-MM-DD string for comparison
+      const patientDate = new Date(patientDateStr);
+      const patientDateOnly = patientDate.toLocaleDateString('en-CA'); // YYYY-MM-DD format
+
+      if (startDate) {
+        const startDateOnly = startDate.toLocaleDateString('en-CA');
+        if (patientDateOnly < startDateOnly) {
+          return false;
+        }
       }
-      if (endDate && patientDate > endDate) {
-        return false;
+      if (endDate) {
+        const endDateOnly = endDate.toLocaleDateString('en-CA');
+        if (patientDateOnly > endDateOnly) {
+          return false;
+        }
       }
       return true;
     });
@@ -172,29 +185,36 @@ export const Patients: React.FC = () => {
   const handleAddPatient = async (data: any) => {
     setIsLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newPatient: Patient = {
-        id: Date.now().toString(),
-        firstName: data.firstName,
-        lastName: data.lastName,
-        email: data.email,
+      // Convert form data to backend format
+      const patientData = {
+        first_name: data.firstName,
+        last_name: data.lastName,
+        email: data.email || '',
         phone: data.phone,
         address: data.address,
-        dateOfBirth: new Date(data.dateOfBirth),
-        gender: data.gender,
-        bloodGroup: data.bloodGroup,
-        medicalHistory: [],
-        allergies: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        gender: data.gender?.toUpperCase() || 'M',
+        blood_group: data.bloodGroup || '',
+        date_of_entry: new Date().toISOString(),
+        // Calculate age from dateOfBirth if provided
+        age: data.dateOfBirth ?
+          Math.floor((new Date().getTime() - new Date(data.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) :
+          null,
+        is_active: true,
       };
-      
-      setPatients(prev => [newPatient, ...prev]);
+
+      console.log('📡 Creating patient via backend API:', patientData);
+
+      // Create patient in backend database
+      const newPatient = await dataService.createPatient(patientData);
+      console.log('✅ Patient created successfully:', newPatient);
+
+      // Reload all patients from backend to ensure list is in sync
+      await loadPatients();
+
       setIsAddModalOpen(false);
       toast.success('Patient added successfully!');
     } catch (error) {
+      console.error('❌ Error creating patient:', error);
       toast.error('Failed to add patient');
     } finally {
       setIsLoading(false);
@@ -208,12 +228,12 @@ export const Patients: React.FC = () => {
 
   const handleUpdatePatient = async (data: any) => {
     if (!selectedPatient) return;
-    
+
     setIsLoading(true);
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       const updatedPatient: Patient = {
         ...selectedPatient,
         firstName: data.firstName,
@@ -226,7 +246,7 @@ export const Patients: React.FC = () => {
         bloodGroup: data.bloodGroup,
         updatedAt: new Date(),
       };
-      
+
       setPatients(prev => prev.map(p => p.id === selectedPatient.id ? updatedPatient : p));
       setIsEditModalOpen(false);
       setSelectedPatient(null);
@@ -245,11 +265,11 @@ export const Patients: React.FC = () => {
 
   const handleDeletePatient = async (patientId: string) => {
     if (!confirm('Are you sure you want to delete this patient?')) return;
-    
+
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       setPatients(prev => prev.filter(p => p.id !== patientId));
       toast.success('Patient deleted successfully!');
     } catch (error) {
@@ -277,7 +297,7 @@ export const Patients: React.FC = () => {
             Manage your patients and their medical information
           </p>
         </div>
-        
+
         <div className="mt-4 sm:mt-0 flex items-center space-x-3">
           <div className="flex items-center space-x-2 border border-gray-300 rounded-md p-2">
             <span className="text-sm font-medium text-gray-700">Filter by date:</span>
@@ -326,7 +346,7 @@ export const Patients: React.FC = () => {
             </div>
           </div>
         </Card>
-        
+
         <Card>
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -335,16 +355,16 @@ export const Patients: React.FC = () => {
             <div className="ml-4">
               <p className="text-2xl font-bold text-gray-900">
                 {filteredPatients.filter(p => {
-                  const today = new Date();
-                  const createdAt = new Date(p.createdAt);
-                  return createdAt.toDateString() === today.toDateString();
+                  const today = new Date().toLocaleDateString('en-CA');
+                  const patientDate = new Date(p.date_of_entry || p.created_at || p.createdAt).toLocaleDateString('en-CA');
+                  return patientDate === today;
                 }).length}
               </p>
               <p className="text-sm text-gray-500">New Today</p>
             </div>
           </div>
         </Card>
-        
+
         <Card>
           <div className="flex items-center">
             <div className="flex-shrink-0">
@@ -352,7 +372,7 @@ export const Patients: React.FC = () => {
             </div>
             <div className="ml-4">
               <p className="text-2xl font-bold text-gray-900">
-                {patients.filter(p => p.emergencyContact).length}
+                {patients.filter(p => p.emergencyContact || p.emergency_contact_phone).length}
               </p>
               <p className="text-sm text-gray-500">With Emergency Contact</p>
             </div>
@@ -454,7 +474,7 @@ export const Patients: React.FC = () => {
                   <div className="space-y-2 text-sm">
                     <p><strong>Age:</strong> {selectedPatient.age || 'N/A'} {typeof selectedPatient.age === 'number' ? 'years' : ''}</p>
                     <p><strong>Gender:</strong> {selectedPatient.gender || 'N/A'}</p>
-                    <p><strong>Blood Group:</strong> {selectedPatient.bloodGroup || 'N/A'}</p>
+                    <p><strong>Blood Group:</strong> {selectedPatient.bloodGroup || selectedPatient.blood_group || 'N/A'}</p>
                   </div>
                 </div>
 
@@ -471,7 +491,7 @@ export const Patients: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-medium text-gray-900 mb-2">Medical Information</h4>
                   <div className="space-y-2 text-sm">
-                    <p><strong>Medical History:</strong> {selectedPatient.medicalHistory?.join(', ') || 'None'}</p>
+                    <p><strong>Medical History:</strong> {selectedPatient.medicalHistory?.join(', ') || selectedPatient.medical_history || 'None'}</p>
                     <p><strong>Allergies:</strong> {selectedPatient.allergies?.join(', ') || 'None'}</p>
                   </div>
                 </div>

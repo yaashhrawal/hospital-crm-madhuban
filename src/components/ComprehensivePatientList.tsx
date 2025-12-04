@@ -65,24 +65,24 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
     // Debug: Log transaction data to see available fields
     logger.log('🔍 Transaction data for prescription:', transaction);
     logger.log('🏥 Available transaction fields:', Object.keys(transaction));
-    
+
     // Enhanced doctor information resolution
     let finalDoctorName = '';
     let finalDepartment = '';
     let doctorDegree = '';
     let doctorSpecialization = '';
-    
+
     // Priority 1: Use transaction doctor_name and department if available
     if (transaction.doctor_name && transaction.doctor_name.trim()) {
       finalDoctorName = transaction.doctor_name.trim();
       logger.log('✅ Using transaction doctor_name:', finalDoctorName);
     }
-    
+
     if (transaction.department && transaction.department.trim()) {
       finalDepartment = transaction.department.trim();
       logger.log('✅ Using transaction department:', finalDepartment);
     }
-    
+
     // Priority 2: If transaction has doctor_id, try to get complete doctor info
     if (transaction.doctor_id && (!finalDoctorName || !finalDepartment)) {
       try {
@@ -92,7 +92,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
           .select('name, department, degree, specialization')
           .eq('id', transaction.doctor_id)
           .single();
-          
+
         if (doctorInfo && !error) {
           finalDoctorName = finalDoctorName || doctorInfo.name || '';
           finalDepartment = finalDepartment || doctorInfo.department || '';
@@ -106,24 +106,24 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
         logger.log('⚠️ Could not fetch doctor details from doctor_id:', error);
       }
     }
-    
+
     // Priority 3: Fall back to patient assigned doctor/department
     if (!finalDoctorName && patient.assigned_doctor) {
       finalDoctorName = patient.assigned_doctor;
       logger.log('🔄 Fallback to patient assigned_doctor:', finalDoctorName);
     }
-    
+
     if (!finalDepartment && patient.assigned_department) {
       finalDepartment = patient.assigned_department;
       logger.log('🔄 Fallback to patient assigned_department:', finalDepartment);
     }
-    
+
     // Priority 4: Final fallback to patient doctor_name field
     if (!finalDoctorName && patient.doctor_name) {
       finalDoctorName = patient.doctor_name;
       logger.log('🔄 Final fallback to patient doctor_name:', finalDoctorName);
     }
-    
+
     logger.log('🎯 FINAL Doctor resolution:', {
       transaction_doctor_name: transaction.doctor_name,
       transaction_department: transaction.department,
@@ -135,7 +135,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
       doctor_degree: doctorDegree,
       doctor_specialization: doctorSpecialization
     });
-    
+
     // Create enhanced patient object with transaction-specific doctor details
     const patientForPrescription = {
       ...patient,
@@ -157,7 +157,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
         description: transaction.description
       }
     };
-    
+
     logger.log('🎯 Final patient data for prescription:', {
       assigned_doctor: patientForPrescription.assigned_doctor,
       doctor_name: patientForPrescription.doctor_name,
@@ -165,13 +165,13 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
       doctor_degree: patientForPrescription.doctor_degree,
       doctor_specialization: patientForPrescription.doctor_specialization
     });
-    
+
     setSelectedPatientForPrescription(patientForPrescription);
     setSelectedTransactionForPrescription(transaction);
     setSelectedPrescriptionType(prescriptionType);
     setShowTransactionPrescription(true);
   };
-  
+
   if (!isOpen) return null;
 
   const totalSpent = patient.totalSpent || 0;
@@ -192,7 +192,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
       newSelected.delete(transactionId);
     }
     setSelectedTransactions(newSelected);
-    
+
     // Update select all state
     setSelectAll(newSelected.size === transactions.length);
   };
@@ -243,7 +243,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
     // Default hospital information (same as main receipt)
     const DEFAULT_HOSPITAL_INFO = {
       name: '',
-      address: '10, Madhav Vihar Shobhagpura, Udaipur (313001)', 
+      address: '10, Madhav Vihar Shobhagpura, Udaipur (313001)',
       phone: '+91 9119118000',
       email: 'valanthospital@gmail.com',
       registration: '',
@@ -258,7 +258,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
       date: new Date().toLocaleDateString('en-IN'),
       time: new Date().toLocaleTimeString([], {
         hour: '2-digit',
-        minute: '2-digit', 
+        minute: '2-digit',
         hour12: true
       }),
       hospital: DEFAULT_HOSPITAL_INFO,
@@ -355,7 +355,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
             }
           }
         }
-        
+
         // Ensure amounts are non-negative
         const finalNetAmount = Math.max(0, Math.abs(transaction.amount));
 
@@ -477,18 +477,18 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
       tempContainer.style.position = 'absolute';
       tempContainer.style.left = '-9999px';
       document.body.appendChild(tempContainer);
-      
+
       const root = createRoot(tempContainer);
-      
+
       // Render the ReceiptTemplate to get HTML
       root.render(<ReceiptTemplate data={data} />);
-      
+
       // Wait for rendering to complete, then create custom HTML
       setTimeout(() => {
         // Clean up the temporary container
         root.unmount();
         document.body.removeChild(tempContainer);
-        
+
         // Create custom receipt HTML with logo and proper columns
         const receiptHTML = `
           <div class="receipt-template bg-white p-6 max-w-4xl mx-auto">
@@ -534,13 +534,13 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
               </thead>
               <tbody>
                 ${data.charges.map((charge, index) => {
-                  const discountDisplay = charge.discountPercentage
-                    ? `${charge.discountPercentage}% (₹${(charge.discountAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
-                    : (charge.discountAmount && charge.discountAmount > 0)
-                      ? `₹${charge.discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                      : '-';
+          const discountDisplay = charge.discountPercentage
+            ? `${charge.discountPercentage}% (₹${(charge.discountAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`
+            : (charge.discountAmount && charge.discountAmount > 0)
+              ? `₹${charge.discountAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : '-';
 
-                  return `
+          return `
                   <tr>
                     <td class="border px-2 py-2 text-center">${index + 1}</td>
                     <td class="border px-2 py-2">${charge.description}</td>
@@ -550,7 +550,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                     <td class="border px-2 py-2 text-right">₹${charge.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>
                   `;
-                }).join('')}
+        }).join('')}
               </tbody>
             </table>
             
@@ -578,7 +578,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
             </div>
           </div>
         `;
-        
+
         // Create the complete HTML for the new window with full CSS
         const printContent = `
           <!DOCTYPE html>
@@ -797,11 +797,11 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
 
               // Patient and receipt data for email
               const patient = ${JSON.stringify({
-                id: patient.id,
-                prefix: patient.prefix || '',
-                first_name: patient.first_name,
-                last_name: patient.last_name
-              })};
+          id: patient.id,
+          prefix: patient.prefix || '',
+          first_name: patient.first_name,
+          last_name: patient.last_name
+        })};
               const receiptData = ${JSON.stringify(receiptData)};
 
               function showEmailModal() {
@@ -963,12 +963,12 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
 
     try {
       setDeletingTransactionId(transactionId);
-      
+
       // Permanently delete the transaction
       await HospitalService.deleteTransaction(transactionId);
-      
+
       toast.success('Transaction deleted permanently from all records.');
-      
+
       // Remove the deleted transaction from the current patient's transaction list
       const updatedTransactions = patient.transactions?.filter(t => t.id !== transactionId) || [];
       const updatedPatient = {
@@ -978,33 +978,33 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
         totalSpent: updatedTransactions
           .filter(t => t.status !== 'CANCELLED')
           .reduce((sum, t) => sum + (t.amount || 0), 0),
-        visitCount: updatedTransactions.filter(t => 
-          t.transaction_type === 'ENTRY_FEE' || 
+        visitCount: updatedTransactions.filter(t =>
+          t.transaction_type === 'ENTRY_FEE' ||
           t.transaction_type === 'entry_fee' ||
           t.transaction_type === 'CONSULTATION' ||
           t.transaction_type === 'consultation'
         ).length || 1
       };
-      
+
       // Update the patient in the parent component's state
       patient.transactions = updatedTransactions;
       patient.totalSpent = updatedPatient.totalSpent;
       patient.visitCount = updatedPatient.visitCount;
-      
+
       // Trigger dashboard refresh to update totals everywhere
       window.dispatchEvent(new Event('transactionUpdated'));
-      
+
       // Trigger patient list refresh to update the main list
       if (onPatientUpdated) {
         onPatientUpdated();
       }
-      
+
       // Don't close the modal - let user continue viewing/managing transactions
       toast('You can continue managing transactions or close this window.', {
         icon: 'ℹ️',
         duration: 3000
       });
-      
+
     } catch (error: any) {
       toast.error(`Failed to delete transaction: ${error.message || error}`);
     } finally {
@@ -1043,31 +1043,31 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                 // Use the same logic as in the table for consistency
                 let lastVisitDate = null;
                 let dateSource = '';
-                
+
                 // Priority 1: Use date_of_entry if it's explicitly set (user-defined visit date)
                 if (patient.date_of_entry && patient.date_of_entry.trim() !== '') {
                   lastVisitDate = patient.date_of_entry;
                   dateSource = 'date_of_entry';
                 }
-                
+
                 // Priority 2: Most recent transaction date (if no date_of_entry)
                 else if (patient.transactions && patient.transactions.length > 0) {
                   const activeTransactions = patient.transactions
                     .filter(t => t.status !== 'CANCELLED' && t.created_at)
                     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                  
+
                   if (activeTransactions.length > 0) {
                     lastVisitDate = activeTransactions[0].created_at;
                     dateSource = 'transaction';
                   }
                 }
-                
+
                 // Priority 3: Use pre-calculated lastVisit field
                 else if (patient.lastVisit) {
                   lastVisitDate = patient.lastVisit;
                   dateSource = 'lastVisit';
                 }
-                
+
                 // Priority 4: Fallback to creation date
                 else if (patient.created_at) {
                   lastVisitDate = patient.created_at;
@@ -1086,9 +1086,9 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                   selected_date: lastVisitDate,
                   date_source: dateSource
                 });
-                
+
                 if (!lastVisitDate) return 'Never';
-                
+
                 try {
                   let date;
                   // Handle date strings properly to avoid timezone issues
@@ -1099,12 +1099,12 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                   } else {
                     date = new Date(lastVisitDate);
                   }
-                  
+
                   if (isNaN(date.getTime())) return 'Invalid Date';
-                  
+
                   return date.toLocaleDateString('en-IN', {
                     day: '2-digit',
-                    month: '2-digit', 
+                    month: '2-digit',
                     year: 'numeric'
                   });
                 } catch (error) {
@@ -1126,7 +1126,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
             <div><span className="font-medium">Gender:</span> {patient.gender === 'MALE' ? 'Male (M)' : patient.gender === 'FEMALE' ? 'Female (F)' : patient.gender || 'Not specified'}</div>
             <div><span className="font-medium">Date of Birth:</span> {patient.date_of_birth || 'Not provided'}</div>
             {(patient.patient_tag || patient.notes) && (
-              <div><span className="font-medium">Patient Tag:</span> 
+              <div><span className="font-medium">Patient Tag:</span>
                 <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">
                   {patient.patient_tag || patient.notes}
                 </span>
@@ -1148,7 +1148,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
         <div>
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold" style={{ color: '#0056B3' }}>Transaction History ({transactions.length})</h3>
-            
+
             {/* Bulk Actions */}
             {transactions.length > 0 && (
               <div className="flex items-center gap-3">
@@ -1161,7 +1161,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                   />
                   Select All ({transactions.length})
                 </label>
-                
+
                 {selectedTransactions.size > 0 && (
                   <>
                     <span className="text-sm text-blue-600 font-medium">
@@ -1178,7 +1178,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
               </div>
             )}
           </div>
-          
+
           {transactions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -1205,8 +1205,8 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                           checked={selectedTransactions.has(transaction.id)}
                           onChange={(e) => handleTransactionSelect(transaction.id, e.target.checked)}
                           className="w-4 h-4"
-                          style={{ 
-                            minWidth: '16px', 
+                          style={{
+                            minWidth: '16px',
                             minHeight: '16px',
                             accentColor: '#2563eb',
                             cursor: 'pointer'
@@ -1216,7 +1216,7 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                       <td className="p-2">{(() => {
                         // FIXED: Use ACTUAL transaction date first, not patient entry date
                         let displayDate = null;
-                        
+
                         // Priority: 1. transaction_date (actual service date) 2. created_at 3. patient entry date (fallback only)
                         if (transaction.transaction_date) {
                           displayDate = transaction.transaction_date;
@@ -1225,22 +1225,22 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                         } else if (transaction.patient?.date_of_entry && transaction.patient.date_of_entry.trim() !== '') {
                           displayDate = transaction.patient.date_of_entry;
                         }
-                        
+
                         try {
                           if (typeof displayDate === 'string' && displayDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
                             const [year, month, day] = displayDate.split('-').map(Number);
                             const date = new Date(year, month - 1, day);
-                            return date.toLocaleDateString('en-IN', { 
+                            return date.toLocaleDateString('en-IN', {
                               timeZone: 'Asia/Kolkata',
                               day: '2-digit',
-                              month: '2-digit', 
+                              month: '2-digit',
                               year: 'numeric'
                             });
                           } else {
-                            return new Date(displayDate).toLocaleDateString('en-IN', { 
+                            return new Date(displayDate).toLocaleDateString('en-IN', {
                               timeZone: 'Asia/Kolkata',
                               day: '2-digit',
-                              month: '2-digit', 
+                              month: '2-digit',
                               year: 'numeric'
                             });
                           }
@@ -1249,12 +1249,11 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                         }
                       })()}</td>
                       <td className="p-2">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          transaction.transaction_type === 'CONSULTATION' ? 'bg-blue-100 text-blue-800' :
-                          transaction.transaction_type === 'ADMISSION' ? 'bg-green-100 text-green-800' :
-                          transaction.transaction_type === 'REFUND' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span className={`px-2 py-1 rounded text-xs ${transaction.transaction_type === 'CONSULTATION' ? 'bg-blue-100 text-blue-800' :
+                            transaction.transaction_type === 'ADMISSION' ? 'bg-green-100 text-green-800' :
+                              transaction.transaction_type === 'REFUND' ? 'bg-red-100 text-red-800' :
+                                'bg-gray-100 text-gray-800'
+                          }`}>
                           {transaction.transaction_type}
                         </span>
                       </td>
@@ -1290,11 +1289,10 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
                       })()}</td>
                       <td className="p-2">{transaction.payment_mode}</td>
                       <td className="p-2">
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          transaction.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                          transaction.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
+                        <span className={`px-2 py-1 rounded text-xs ${transaction.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                            transaction.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                          }`}>
                           {transaction.status}
                         </span>
                       </td>
@@ -1490,7 +1488,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
     if (patient.ipd_status === 'DISCHARGED') {
       return { status: 'Discharged', style: 'bg-gray-100 text-gray-800' };
     }
-    
+
     // Check if patient has discharged admissions
     if (patient.admissions && patient.admissions.length > 0) {
       const hasDischargedAdmission = patient.admissions.some(
@@ -1500,12 +1498,12 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
         return { status: 'Discharged', style: 'bg-gray-100 text-gray-800' };
       }
     }
-    
+
     // Check if currently admitted to IPD
     if (patient.ipd_status === 'ADMITTED') {
       return { status: 'IPD', style: 'bg-red-100 text-red-800' };
     }
-    
+
     // Default to OPD
     return { status: patient.departmentStatus || 'OPD', style: 'bg-green-100 text-green-800' };
   };
@@ -1518,7 +1516,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
     }
 
     logger.log(`Patient ${patient.first_name} ${patient.last_name} has ${patient.transactions.length} transactions`);
-    
+
     const completedTransactions = patient.transactions.filter(t => t.status === 'COMPLETED' && t.payment_mode);
     logger.log(`Completed transactions with payment_mode:`, completedTransactions.map(t => ({
       id: t.id,
@@ -1540,13 +1538,13 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
       logger.log(`No recent transaction with payment_mode found`);
       return null;
     }
-    
+
     logger.log(`Recent transaction payment_mode: "${recentTransaction.payment_mode}"`);
-    
+
     // Normalize payment mode comparison - handle both uppercase and lowercase
     const paymentMode = recentTransaction.payment_mode?.toLowerCase();
     const result = paymentMode === 'cash' ? 'Cash' : 'Online';
-    
+
     logger.log(`Normalized payment_mode: "${paymentMode}" -> Returning: ${result}`);
     return result;
   };
@@ -1596,16 +1594,16 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
       const normEnd = normalizeToYYYYMMDD(currentEndDate);
       logger.log('🔄 loadPatients called with (normalized):', { normStart, normEnd });
       setLoading(true);
-      
+
       let patientsData;
 
       // Always use the backend method with error handling
       patientsData = await ExactDateService.getPatientsForDateRange(normStart, normEnd);
       logger.log('Number of patients fetched:', patientsData.length);
-      
+
       // Debug the returned patients
       logger.log('✅ Loaded', patientsData.length, 'patients for the date range');
-      
+
       // Filter out patients who have PENDING appointments (not confirmed/completed ones)
       patientsData = patientsData.filter(patient => {
         // Check localStorage appointments for this patient
@@ -1614,14 +1612,14 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           const hasPendingAppointment = appointments.some((apt: any) => {
             // Match by patient name or patient_id or patient_uuid
             const patientName = `${patient.first_name} ${patient.last_name}`;
-            const isPatientMatch = apt.patient_name === patientName || 
-                                   apt.patient_id === patient.patient_id || 
-                                   apt.patient_uuid === patient.id;
-            
+            const isPatientMatch = apt.patient_name === patientName ||
+              apt.patient_id === patient.patient_id ||
+              apt.patient_uuid === patient.id;
+
             // Only hide if patient matches AND appointment is still pending (not confirmed/completed)
             return isPatientMatch && (apt.status === 'scheduled' || !apt.status);
           });
-          
+
           if (hasPendingAppointment) {
             logger.log(`👤 Hiding patient ${patient.first_name} ${patient.last_name} - has PENDING appointment`);
             return false; // Hide this patient
@@ -1629,10 +1627,10 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
         } catch (error) {
           logger.error('Error checking appointments for patient:', error);
         }
-        
+
         return true; // Show this patient (no pending appointments)
       });
-      
+
       // Calculate totalSpent based on selected date filter
       const filteredPatientsData = patientsData.map(patient => {
         const transactions = patient.transactions || [];
@@ -1673,7 +1671,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           if (type === 'ENTRY_FEE' || type === 'CONSULTATION' || type === 'LAB_TEST' || type === 'XRAY' || type === 'PROCEDURE') return cnt + 1;
           return cnt;
         }, 0);
-        
+
         // Determine lastVisit from filtered transactions (latest date) or fallback to existing fields
         let lastVisitFromFiltered: string | null = null;
         if (filteredTransactions.length > 0) {
@@ -1684,7 +1682,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
             })
             .sort((a: string, b: string) => (a > b ? -1 : 1))[0] || null;
         }
-        
+
         return {
           ...patient,
           transactions: filteredTransactions,         // show only date-filtered transactions everywhere
@@ -1693,14 +1691,17 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           lastVisit: lastVisitFromFiltered || patient.lastVisit || patient.created_at
         };
       });
-      
-      // When a date filter is active (not 'all'), remove patients with zero transactions in range
+
+      // When a date filter is active (not 'all'), show patients who:
+      // 1. Were registered in the date range (based on date_of_entry), OR
+      // 2. Have transactions in the date range
+      // This ensures newly registered patients without transactions still appear
       const finalPatients = dateRange === 'all'
         ? filteredPatientsData
-        : filteredPatientsData.filter(p => Array.isArray(p.transactions) && p.transactions.length > 0);
-      
+        : filteredPatientsData; // Show all patients returned by the backend (already filtered by date_of_entry)
+
       setPatients(finalPatients);
-      
+
       // Extract unique tags from finalPatients (only show tags relevant to the current view)
       const uniqueTags = [...new Set([
         ...finalPatients
@@ -1711,7 +1712,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           .filter(note => note && note.toString().trim() !== ''),
         'Community', 'Camp'
       ])].sort();
-      
+
       setAvailableTags(uniqueTags);
     } catch (error) {
       toast.error(`Failed to load patients: ${(error as any).message}`);
@@ -1731,7 +1732,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
     // Apply search filter
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(patient => 
+      filtered = filtered.filter(patient =>
         patient.first_name.toLowerCase().includes(search) ||
         patient.last_name.toLowerCase().includes(search) ||
         patient.phone.includes(search) ||
@@ -1747,7 +1748,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
 
     // Apply tag filter
     if (filterTag !== 'all') {
-      filtered = filtered.filter(patient => 
+      filtered = filtered.filter(patient =>
         patient.patient_tag === filterTag || patient.notes === filterTag
       );
     }
@@ -1755,7 +1756,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
     // Apply sorting
     filtered.sort((a, b) => {
       let comparison = 0;
-      
+
       switch (sortBy) {
         case 'name':
           comparison = (a.first_name + ' ' + a.last_name).localeCompare(b.first_name + ' ' + b.last_name);
@@ -1776,7 +1777,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
             }
             return new Date(patient.created_at).getTime();
           };
-          
+
           comparison = getPatientSortDate(a) - getPatientSortDate(b);
           break;
         case 'visits':
@@ -1786,7 +1787,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           comparison = (a.totalSpent || 0) - (b.totalSpent || 0);
           break;
       }
-      
+
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
@@ -1842,10 +1843,10 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
 
   const handlePrescription = (patient: PatientWithRelations, template: string) => {
     setSelectedPatientForPrescription(patient);
-    
+
     // Check if patient has multiple doctors
     const hasMultipleDoctors = patient.assigned_doctors && patient.assigned_doctors.length > 1;
-    
+
     if (hasMultipleDoctors) {
       // Use multiple prescription generator
       setMultiplePrescriptionType(template as 'valant' | 'vh');
@@ -1883,13 +1884,13 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
 
     try {
       setLoading(true);
-      
+
       // Delete the patient using HospitalService
       await HospitalService.deletePatient(patientId);
-      
+
       toast.success('Patient deleted successfully');
       await loadPatients(startDate, endDate); // Reload the patients list
-      
+
     } catch (error: any) {
       toast.error(`Failed to delete patient: ${error.message}`);
     } finally {
@@ -1900,67 +1901,67 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
   const exportPatientsToExcel = async () => {
     try {
       logger.log('📊 Starting Excel Export - Creating separate rows for each consultation...');
-      
+
       // Create export data with separate rows for each consultation within date range
       const exportData: any[] = [];
-      
+
       for (const patient of filteredPatients) {
         logger.log(`📊 Processing patient: ${patient.first_name} ${patient.last_name}`);
-        
+
         // Get all transactions for this patient within the selected date range
         const transactions = patient.transactions || [];
-        
+
         // Filter transactions by date range if date filters are active
         let consultationsInRange = transactions;
-        
+
         if (dateRange !== 'all') {
           consultationsInRange = transactions.filter(transaction => {
             // Get transaction date - prioritize transaction_date, then created_at
             let transactionDateStr = null;
-            
+
             if (transaction.transaction_date) {
-              transactionDateStr = transaction.transaction_date.includes('T') 
-                ? transaction.transaction_date.split('T')[0] 
+              transactionDateStr = transaction.transaction_date.includes('T')
+                ? transaction.transaction_date.split('T')[0]
                 : transaction.transaction_date;
             } else if (transaction.created_at) {
               transactionDateStr = transaction.created_at.split('T')[0];
             }
-            
+
             if (!transactionDateStr) return false;
-            
+
             // Use string comparison for consistent date filtering (same as main filter)
             const isInDateRange = transactionDateStr >= startDate && transactionDateStr <= endDate;
-            
+
             logger.log(`Transaction ${transaction.id} - Date: ${transactionDateStr}, In Range: ${isInDateRange}`);
-            
+
             return isInDateRange;
           });
         }
-        
+
         // If patient has consultations in the date range, create separate rows for each
         if (consultationsInRange.length > 0) {
-          
+
           // Group consultations by date and doctor to avoid duplicates
           const consultationMap = new Map();
-          
+
           consultationsInRange.forEach(transaction => {
             // Get properly formatted transaction date
             let transactionDate = null;
-            
+
             if (transaction.transaction_date) {
-              transactionDate = transaction.transaction_date.includes('T') 
-                ? transaction.transaction_date.split('T')[0] 
+              transactionDate = transaction.transaction_date.includes('T')
+                ? transaction.transaction_date.split('T')[0]
                 : transaction.transaction_date;
             } else if (transaction.created_at) {
               transactionDate = transaction.created_at.split('T')[0];
             }
-            
+
             // Get doctor name from transaction or patient
             let doctorName = transaction.doctor_name || transaction.doctor || patient.assigned_doctor || 'Unknown Doctor';
-            
+
             // Get department - try multiple sources
             let department = transaction.department || transaction.assigned_department;
-            
+
             // If no department in transaction, try to infer from doctor name or patient data
             if (!department) {
               // Check if doctor name contains department info (like "DR SMITH - CARDIOLOGY")
@@ -1975,14 +1976,14 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                 department = patient.assigned_department || 'General';
               }
             }
-            
+
             // Clean up department name
             if (department) {
               department = department.toUpperCase().trim();
             }
-            
+
             const consultationKey = `${transactionDate}-${doctorName}-${department}`;
-            
+
             logger.log(`👨‍⚕️ Processing consultation for ${patient.first_name}:`, {
               date: transactionDate,
               doctor: doctorName,
@@ -1993,7 +1994,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
               patientAssignedDoctor: patient.assigned_doctor,
               patientAssignedDept: patient.assigned_department
             });
-            
+
             if (!consultationMap.has(consultationKey)) {
               consultationMap.set(consultationKey, {
                 date: transactionDate,
@@ -2008,7 +2009,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
               existing.amount += transaction.amount;
             }
           });
-          
+
           // Create a row for each unique consultation
           consultationMap.forEach((consultation, key) => {
             exportData.push({
@@ -2032,7 +2033,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
               _registration_date_raw: patient.created_at ? patient.created_at.split('T')[0] : null
             });
           });
-          
+
         } else {
           // If no consultations in range, still show the patient with empty consultation data
           exportData.push({
@@ -2054,16 +2055,16 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           });
         }
       }
-      
+
       // Sort export data by consultation date (newest first) for proper sequencing
       exportData.sort((a, b) => {
         const dateA = a._consultation_date_raw;
         const dateB = b._consultation_date_raw;
-        
+
         if (!dateA && !dateB) return 0;
         if (!dateA) return 1;
         if (!dateB) return -1;
-        
+
         // Convert to proper Date objects for comparison
         const parseDateStr = (dateStr: string): Date => {
           if (dateStr.includes('T')) {
@@ -2074,20 +2075,20 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
             return new Date(year, month - 1, day);
           }
         };
-        
+
         const dateObjA = parseDateStr(dateA);
         const dateObjB = parseDateStr(dateB);
-        
+
         // Sort by date descending (newest first)
         return dateObjB.getTime() - dateObjA.getTime();
       });
-      
+
       logger.log('📊 Export data sorted. Entries:', exportData.map(row => ({
         patient: row.first_name + ' ' + row.last_name,
         consultation_date: row.consultation_date,
         raw_date: row._consultation_date_raw
       })));
-      
+
       // Remove raw sorting fields from final export
       exportData.forEach(row => {
         delete row._consultation_date_raw;
@@ -2096,20 +2097,20 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
 
       // Debug final export data
       logger.log('📊 Final Excel Export Data Sample (all rows):', exportData);
-      
+
       logger.log(`📊 Created ${exportData.length} rows for Excel export`);
-      
-      const dateRangeText = dateRange === 'all' ? 'All_Time' : 
-                           dateRange === 'today' ? 'Today' :
-                           dateRange === 'week' ? 'This_Week' :
-                           dateRange === 'month' ? 'This_Month' :
-                           `${startDate}_to_${endDate}`;
-      
+
+      const dateRangeText = dateRange === 'all' ? 'All_Time' :
+        dateRange === 'today' ? 'Today' :
+          dateRange === 'week' ? 'This_Week' :
+            dateRange === 'month' ? 'This_Month' :
+              `${startDate}_to_${endDate}`;
+
       const success = exportToExcel({
         filename: `Patient_Consultations_${dateRangeText}_${getLocalDateString()}`,
         headers: [
           "Patient ID",
-          "First Name", 
+          "First Name",
           "Last Name",
           "Phone",
           "Consultation Date",
@@ -2119,7 +2120,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           "Consultation Type",
           "Gender",
           "Age",
-          "Address", 
+          "Address",
           "Patient Tag",
           "Total Patient Spent",
           "Registration Date"
@@ -2143,8 +2144,8 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
     } catch (error: any) {
       toast.error('Failed to export: ' + error.message);
     }
- };
-  
+  };
+
   if (loading) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -2168,40 +2169,40 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
           {dateRange !== 'all' && (
             <div className="mt-3 text-sm text-blue-600 bg-blue-50 px-4 py-2 rounded-full inline-block">
               📅 Showing patients from: {
-                dateRange === 'today' ? new Date(startDate).toLocaleDateString('en-IN', { 
+                dateRange === 'today' ? new Date(startDate).toLocaleDateString('en-IN', {
                   timeZone: 'Asia/Kolkata',
                   day: '2-digit',
-                  month: '2-digit', 
+                  month: '2-digit',
                   year: 'numeric'
                 }) :
-                dateRange === 'custom' ? new Date(startDate).toLocaleDateString('en-IN', { 
-                  timeZone: 'Asia/Kolkata',
-                  day: '2-digit',
-                  month: '2-digit', 
-                  year: 'numeric'
-                }) :
-                dateRange === 'week' ? `This week (${new Date(startDate).toLocaleDateString('en-IN', { 
-                  timeZone: 'Asia/Kolkata',
-                  day: '2-digit',
-                  month: '2-digit', 
-                  year: 'numeric'
-                })} - ${new Date(endDate).toLocaleDateString('en-IN', { 
-                  timeZone: 'Asia/Kolkata',
-                  day: '2-digit',
-                  month: '2-digit', 
-                  year: 'numeric'
-                })})` :
-                `This month (${new Date(startDate).toLocaleDateString('en-IN', { 
-                  timeZone: 'Asia/Kolkata',
-                  day: '2-digit',
-                  month: '2-digit', 
-                  year: 'numeric'
-                })} - ${new Date(endDate).toLocaleDateString('en-IN', { 
-                  timeZone: 'Asia/Kolkata',
-                  day: '2-digit',
-                  month: '2-digit', 
-                  year: 'numeric'
-                })})`
+                  dateRange === 'custom' ? new Date(startDate).toLocaleDateString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric'
+                  }) :
+                    dateRange === 'week' ? `This week (${new Date(startDate).toLocaleDateString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })} - ${new Date(endDate).toLocaleDateString('en-IN', {
+                      timeZone: 'Asia/Kolkata',
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric'
+                    })})` :
+                      `This month (${new Date(startDate).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                      })} - ${new Date(endDate).toLocaleDateString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric'
+                      })})`
               }
             </div>
           )}
@@ -2351,56 +2352,51 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
               <div className="flex gap-2 flex-wrap items-center">
                 <button
                   onClick={() => setDateRange('all')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    dateRange === 'all' 
-                      ? 'bg-blue-600 text-white' 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${dateRange === 'all'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   All Time
                 </button>
                 <button
                   onClick={() => setDateRange('today')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    dateRange === 'today' 
-                      ? 'bg-blue-600 text-white' 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${dateRange === 'today'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   Today
                 </button>
                 <button
                   onClick={() => setDateRange('week')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    dateRange === 'week' 
-                      ? 'bg-blue-600 text-white' 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${dateRange === 'week'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   Last 7 Days
                 </button>
                 <button
                   onClick={() => setDateRange('month')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    dateRange === 'month' 
-                      ? 'bg-blue-600 text-white' 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${dateRange === 'month'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   This Month
                 </button>
                 <button
                   onClick={() => setDateRange('custom')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    dateRange === 'custom' 
-                      ? 'bg-blue-600 text-white' 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${dateRange === 'custom'
+                      ? 'bg-blue-600 text-white'
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                    }`}
                 >
                   Custom Range
                 </button>
 
-                
+
 
                 {/* Inline Date Picker for Custom */}
                 {dateRange === 'custom' && (
@@ -2454,41 +2450,37 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
               <span className="font-medium text-gray-700">Sort by:</span>
               <button
                 onClick={() => handleSort('name')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sortBy === 'name' 
-                    ? 'bg-blue-600 text-white' 
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${sortBy === 'name'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 Patient Name {getSortIcon('name')}
               </button>
               <button
                 onClick={() => handleSort('date')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sortBy === 'date' 
-                    ? 'bg-blue-600 text-white' 
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${sortBy === 'date'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 Last Visit {getSortIcon('date')}
               </button>
               <button
                 onClick={() => handleSort('visits')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sortBy === 'visits' 
-                    ? 'bg-blue-600 text-white' 
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${sortBy === 'visits'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 Visits {getSortIcon('visits')}
               </button>
               <button
                 onClick={() => handleSort('spent')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  sortBy === 'spent' 
-                    ? 'bg-blue-600 text-white' 
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${sortBy === 'spent'
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 Total Spent {getSortIcon('spent')}
               </button>
@@ -2610,7 +2602,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                       <p className="text-sm font-medium text-gray-800">
                         {(() => {
                           let lastVisitDate = null;
-                          
+
                           // Same date logic as before
                           if (patient.date_of_entry && patient.date_of_entry.trim() !== '') {
                             lastVisitDate = patient.date_of_entry;
@@ -2626,7 +2618,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                           } else if (patient.created_at) {
                             lastVisitDate = patient.created_at;
                           }
-                          
+
                           if (lastVisitDate) {
                             try {
                               let date;
@@ -2639,7 +2631,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                               if (isNaN(date.getTime())) return 'Invalid Date';
                               return date.toLocaleDateString('en-IN', {
                                 day: '2-digit',
-                                month: '2-digit', 
+                                month: '2-digit',
                                 year: 'numeric'
                               });
                             } catch (error) {
@@ -2680,7 +2672,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                         <option value="vh">V+H Template</option>
                       </select>
                     </div>
-                    
+
                     {/* Services */}
                     <button
                       onClick={(e) => {
@@ -2692,7 +2684,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                     >
                       🔬 Services
                     </button>
-                    
+
                     {/* Edit */}
                     <button
                       onClick={(e) => {
@@ -2704,7 +2696,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                     >
                       ✏️ Edit
                     </button>
-                    
+
                     {/* IPD */}
                     <button
                       onClick={(e) => {
@@ -2717,7 +2709,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                     >
                       🏥 IPD
                     </button>
-                    
+
                     {/* History */}
                     <button
                       onClick={(e) => {
@@ -2729,7 +2721,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                     >
                       📋 History
                     </button>
-                    
+
                     {/* Receipt */}
                     <button
                       onClick={(e) => {
@@ -2741,7 +2733,7 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                     >
                       🧾 Receipt
                     </button>
-                    
+
                     {/* Delete - Hidden for frontdesk users */}
                     {user?.email !== 'frontdesk@valant.com' && (
                       <button

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { 
-  Users, 
-  Calendar, 
+import {
+  Users,
+  Calendar,
   Bed,
   IndianRupee,
   TrendingDown,
@@ -19,9 +19,10 @@ import { Button } from '@/components/ui/Button';
 import { formatCurrency } from '@/utils';
 import { dashboardService } from '../services/dashboardService';
 import { queryKeys } from '../config/reactQuery';
-import { supabase, HOSPITAL_ID } from '../config/supabaseNew';
+import { HOSPITAL_ID } from '../config/supabaseNew';
 import bedService from '../services/bedService';
 import HospitalService from '../services/hospitalService';
+import { ExactDateService } from '../services/exactDateService';
 
 interface Props {
   onNavigate?: (tab: string) => void;
@@ -35,20 +36,20 @@ interface ServiceBreakdownItem {
 }
 
 interface CardBreakdown {
-  today: { 
-    count: number; 
+  today: {
+    count: number;
     data: any[];
     serviceBreakdown?: { [key: string]: { count: number; amount: number; transactions: any[] } };
     topServices?: ServiceBreakdownItem[];
   };
-  thisWeek: { 
-    count: number; 
+  thisWeek: {
+    count: number;
     data: any[];
     serviceBreakdown?: { [key: string]: { count: number; amount: number; transactions: any[] } };
     topServices?: ServiceBreakdownItem[];
   };
-  thisMonth: { 
-    count: number; 
+  thisMonth: {
+    count: number;
     data: any[];
     serviceBreakdown?: { [key: string]: { count: number; amount: number; transactions: any[] } };
     topServices?: ServiceBreakdownItem[];
@@ -61,63 +62,18 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [cardBreakdown, setCardBreakdown] = useState<CardBreakdown | null>(null);
   const [loadingBreakdown, setLoadingBreakdown] = useState(false);
-  
+
   // Date filter state
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('today');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // Helper function to fetch all transactions with pagination
+  // Helper function to fetch all transactions
   const fetchAllTransactions = async () => {
     try {
-      let allTransactions: any[] = [];
-      const pageSize = 1000;
-      let page = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const from = page * pageSize;
-        const to = from + pageSize - 1;
-
-        console.log(`📄 Fetching transactions page ${page + 1}: rows ${from} to ${to}`);
-
-        const { data, error } = await supabase
-          .from('patient_transactions')
-          .select(`
-            id,
-            amount,
-            payment_mode,
-            transaction_type,
-            description,
-            status,
-            created_at,
-            transaction_date,
-            patient:patients!inner(id, patient_id, first_name, last_name, date_of_entry, assigned_department, assigned_doctor)
-          `)
-          .neq('status', 'CANCELLED')  // Changed to match hospitalService.ts logic
-          .order('created_at', { ascending: false })
-          .range(from, to);
-
-        if (error) {
-          console.error(`❌ Error fetching transactions page ${page + 1}:`, error);
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          allTransactions = [...allTransactions, ...data];
-          console.log(`✅ Fetched ${data.length} transactions in page ${page + 1}, total so far: ${allTransactions.length}`);
-          
-          if (data.length < pageSize) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        } else {
-          hasMore = false;
-        }
-      }
-
+      console.log('📄 Fetching all transactions via HospitalService...');
+      const allTransactions = await HospitalService.getAllTransactions();
       console.log(`📊 Total transactions fetched: ${allTransactions.length}`);
       return allTransactions;
     } catch (error) {
@@ -126,45 +82,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     }
   };
 
-  // Helper function to fetch all expenses with pagination
+  // Helper function to fetch all expenses
   const fetchAllExpenses = async () => {
     try {
-      let allExpenses: any[] = [];
-      const pageSize = 1000;
-      let page = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const from = page * pageSize;
-        const to = from + pageSize - 1;
-
-        console.log(`📄 Fetching expenses page ${page + 1}: rows ${from} to ${to}`);
-
-        const { data, error } = await supabase
-          .from('daily_expenses')
-          .select('*')
-          .order('expense_date', { ascending: false })
-          .range(from, to);
-
-        if (error) {
-          console.error(`❌ Error fetching expenses page ${page + 1}:`, error);
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          allExpenses = [...allExpenses, ...data];
-          console.log(`✅ Fetched ${data.length} expenses in page ${page + 1}, total so far: ${allExpenses.length}`);
-          
-          if (data.length < pageSize) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        } else {
-          hasMore = false;
-        }
-      }
-
+      console.log('📄 Fetching all expenses via HospitalService...');
+      const allExpenses = await HospitalService.getAllExpenses();
       console.log(`📊 Total expenses fetched: ${allExpenses.length}`);
       return allExpenses;
     } catch (error) {
@@ -173,47 +95,12 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     }
   };
 
-  // Helper function to fetch all refunds with pagination
+  // Helper function to fetch all refunds using ExactDateService
   const fetchAllRefunds = async () => {
     try {
-      let allRefunds: any[] = [];
-      const pageSize = 1000;
-      let page = 0;
-      let hasMore = true;
-
-      while (hasMore) {
-        const from = page * pageSize;
-        const to = from + pageSize - 1;
-
-        console.log(`📄 Fetching refunds page ${page + 1}: rows ${from} to ${to}`);
-
-        const { data, error } = await supabase
-          .from('patient_refunds')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .range(from, to);
-
-        if (error) {
-          console.warn(`⚠️ Patient refunds table not accessible (page ${page + 1}):`, error.message);
-          // If table doesn't exist or has permission issues, return empty array
-          return [];
-        }
-
-        if (data && data.length > 0) {
-          allRefunds = [...allRefunds, ...data];
-          console.log(`✅ Fetched ${data.length} refunds in page ${page + 1}, total so far: ${allRefunds.length}`);
-          
-          if (data.length < pageSize) {
-            hasMore = false;
-          } else {
-            page++;
-          }
-        } else {
-          hasMore = false;
-        }
-      }
-
-      console.log(`📊 Total refunds fetched: ${allRefunds.length}`);
+      // Use ExactDateService to get all refunds (wide date range)
+      const allRefunds = await ExactDateService.getPatientRefunds('2000-01-01', '2100-12-31');
+      console.log(`📊 Total refunds fetched via API: ${allRefunds.length}`);
       return allRefunds;
     } catch (error) {
       console.warn('⚠️ Refunds query failed, using empty array:', error);
@@ -239,27 +126,27 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
   // 🔧 NEW: Robust date comparison function to handle multiple formats
   const isSameDate = (dateStr1: string | null | undefined, dateStr2: string | null | undefined): boolean => {
     if (!dateStr1 || !dateStr2) return false;
-    
+
     // Parse both dates to YYYY-MM-DD format for comparison
     const parseDate = (dateStr: string): string => {
       if (!dateStr || dateStr.trim() === '') return '';
-      
+
       // Handle DD/MM/YYYY format (common in date_of_entry)
       if (dateStr.includes('/') && dateStr.split('/').length === 3) {
         const [day, month, year] = dateStr.split('/');
         return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
       }
-      
+
       // Handle ISO format (YYYY-MM-DDTHH:mm:ss.sssZ)
       if (dateStr.includes('T')) {
         return dateStr.split('T')[0];
       }
-      
+
       // Handle YYYY-MM-DD format (already correct)
       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
         return dateStr;
       }
-      
+
       // Fallback: try to parse as Date and format
       try {
         const date = new Date(dateStr);
@@ -269,40 +156,40 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       } catch (e) {
         console.warn('Failed to parse date:', dateStr);
       }
-      
+
       return '';
     };
-    
+
     const parsed1 = parseDate(dateStr1);
     const parsed2 = parseDate(dateStr2);
-    
+
     return parsed1 === parsed2 && parsed1 !== '';
   };
 
   // 🔧 NEW: Simplified date range helper using existing isSameDate logic
   const isDateInRange = (dateStr: string | null | undefined, startDateStr: string, endDateStr: string): boolean => {
     if (!dateStr || !startDateStr || !endDateStr) return false;
-    
+
     // Reuse the existing robust date parsing from isSameDate
     const normalizeDate = (dateStr: string): string => {
       if (!dateStr || dateStr.trim() === '') return '';
-      
+
       // Handle DD/MM/YYYY format (common in date_of_entry)
       if (dateStr.includes('/') && dateStr.split('/').length === 3) {
         const [day, month, year] = dateStr.split('/');
         return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
       }
-      
+
       // Handle ISO format (YYYY-MM-DDTHH:mm:ss.sssZ)
       if (dateStr.includes('T')) {
         return dateStr.split('T')[0];
       }
-      
+
       // Handle YYYY-MM-DD format (already correct)
       if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
         return dateStr;
       }
-      
+
       // Fallback: try to parse as Date and format
       try {
         const date = new Date(dateStr);
@@ -312,22 +199,22 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       } catch (e) {
         console.warn('Failed to parse date in range check:', dateStr);
       }
-      
+
       return '';
     };
-    
+
     const normalizedDate = normalizeDate(dateStr);
     const normalizedStart = normalizeDate(startDateStr);
     const normalizedEnd = normalizeDate(endDateStr);
-    
+
     if (!normalizedDate || !normalizedStart || !normalizedEnd) {
       console.warn('Date normalization failed:', { dateStr, startDateStr, endDateStr });
       return false;
     }
-    
+
     // 🔧 ENHANCED: More inclusive boundary checking
     const result = normalizedDate >= normalizedStart && normalizedDate <= normalizedEnd;
-    
+
     // Debug boundary cases and failed checks
     if (normalizedDate === normalizedStart || normalizedDate === normalizedEnd) {
       console.log('📅 Boundary date match:', {
@@ -340,7 +227,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       // Log near-misses for debugging
       const daysBefore = (new Date(normalizedStart).getTime() - new Date(normalizedDate).getTime()) / (1000 * 60 * 60 * 24);
       const daysAfter = (new Date(normalizedDate).getTime() - new Date(normalizedEnd).getTime()) / (1000 * 60 * 60 * 24);
-      
+
       if (Math.abs(daysBefore) <= 2 || Math.abs(daysAfter) <= 2) {
         console.log('📅 Near-miss date (within 2 days):', {
           original: dateStr,
@@ -352,7 +239,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         });
       }
     }
-    
+
     return result;
   };
 
@@ -361,7 +248,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
   const getDateRange = () => {
     const now = new Date();
     const todayStr = formatDateString(now); // YYYY-MM-DD format
-    
+
     switch (dateFilter) {
       case 'today':
         // Today in IST (same as operations ledger)
@@ -375,7 +262,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           start: todayStart,
           end: todayEnd
         };
-        
+
       case 'week':
         // Last 7 days in IST (6 days ago + today = 7 days total)
         const weekDate = new Date();
@@ -387,7 +274,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           start: weekStart,
           end: weekEnd
         };
-        
+
       case 'month':
         // Current month in IST
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -398,7 +285,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           start: monthStartIST,
           end: monthEnd
         };
-        
+
       case 'custom':
         if (customStartDate && customEndDate) {
           // Custom dates in IST (same format as operations ledger)
@@ -417,7 +304,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           start: fallbackTodayStart,
           end: fallbackTodayEnd
         };
-        
+
       default:
         return null;
     }
@@ -445,29 +332,32 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     if (dateFilter === 'all') {
       return allPatientsData || [];
     }
-    
+
     // Apply date filtering if not 'all' - use same priority logic as transactions
     const dateRange = getDateRange();
     if (dateRange) {
       const startDateStr = dateRange.start.toISOString().split('T')[0];
       const endDateStr = dateRange.end.toISOString().split('T')[0];
-      
+
       const filteredPatients = (allPatientsData || []).filter(patient => {
         // 🔍 CRITICAL FIX: Use same priority logic as transactions
         let effectiveDateStr;
         if (patient.date_of_entry && patient.date_of_entry.trim() !== '') {
           // Priority 1: Patient's date_of_entry (for backdated entries)
-          effectiveDateStr = patient.date_of_entry.includes('T') 
-            ? patient.date_of_entry.split('T')[0] 
+          effectiveDateStr = patient.date_of_entry.includes('T')
+            ? patient.date_of_entry.split('T')[0]
             : patient.date_of_entry;
-        } else {
-          // Priority 2: Patient's created_at date
+        } else if (patient.created_at) {
+          // Priority 2: Patient's created_at date (with null check)
           effectiveDateStr = patient.created_at.split('T')[0];
+        } else {
+          // Priority 3: Default to today if no date available
+          effectiveDateStr = new Date().toISOString().split('T')[0];
         }
-        
+
         return effectiveDateStr >= startDateStr && effectiveDateStr <= endDateStr;
       });
-      
+
       // Enhanced debug patient filtering
       console.log('👥 Dashboard Patients Debug (ENHANCED):', {
         filter: dateFilter,
@@ -479,38 +369,38 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         },
         allPatientCount: allPatientsData?.length || 0,
         filteredPatientCount: filteredPatients?.length || 0,
-        
+
         // Show ALL patients with their effective dates for debugging
         allPatientsWithDates: allPatientsData?.slice(0, 10).map(p => {
-          const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== '' 
+          const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== ''
             ? (p.date_of_entry.includes('T') ? p.date_of_entry.split('T')[0] : p.date_of_entry)
-            : p.created_at.split('T')[0];
+            : (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
           return {
             id: p.id,
             name: `${p.first_name} ${p.last_name}`,
             dateOfEntry: p.date_of_entry,
-            createdAt: p.created_at.split('T')[0],
+            createdAt: p.created_at ? p.created_at.split('T')[0] : null,
             effectiveDate,
             matchesFilter: effectiveDate >= startDateStr && effectiveDate <= endDateStr,
             exactToday: effectiveDate === endDateStr
           };
         }) || [],
-        
+
         // Show filtered patients
         filteredPatients: filteredPatients?.map(p => ({
           id: p.id,
           name: `${p.first_name} ${p.last_name}`,
           dateOfEntry: p.date_of_entry,
-          createdAt: p.created_at.split('T')[0],
-          effectiveDate: p.date_of_entry && p.date_of_entry.trim() !== '' 
+          createdAt: p.created_at ? p.created_at.split('T')[0] : null,
+          effectiveDate: p.date_of_entry && p.date_of_entry.trim() !== ''
             ? (p.date_of_entry.includes('T') ? p.date_of_entry.split('T')[0] : p.date_of_entry)
-            : p.created_at.split('T')[0]
+            : (p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0])
         })) || []
       });
-      
+
       return filteredPatients;
     }
-    
+
     return allPatientsData || [];
   }, [allPatientsData, dateFilter, customStartDate, customEndDate]);
 
@@ -536,11 +426,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       try {
         // Get date range for filtering
         const dateRange = getDateRange();
-        
+
         // Get ALL transactions using pagination - we'll filter in JavaScript to match hospitalService.ts logic
         const allRevenueData = await fetchAllTransactions();
         const revenueQueryError = null; // No error since we handle errors in fetchAllTransactions
-        
+
         // 🚨 CRITICAL DEBUG: Log the raw database query results
         console.log('🔍 RAW DATABASE QUERY RESULTS (FIXED - using pagination):', {
           queryError: revenueQueryError,
@@ -567,16 +457,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           })) || [],
           totalAmount: allRevenueData?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
         });
-        
+
         // 🔍 CRITICAL FIX: Apply JavaScript filtering with same priority logic as hospitalService.ts
         let revenueData = allRevenueData || [];
-        
+
         // 🚫 EXCLUDE ORTHO/DR HEMANT patients and IPD Bills from revenue calculations (matching OperationsLedger logic)
         revenueData = revenueData?.filter(transaction => {
           // Exclude only IPD Bills (SERVICE with [IPD_BILL] in description)
           // Keep DEPOSIT, ADMISSION_FEE, ADVANCE_PAYMENT and regular SERVICE transactions
           const isIPDBill = transaction.transaction_type === 'SERVICE' &&
-                           transaction.description?.includes('[IPD_BILL]');
+            transaction.description?.includes('[IPD_BILL]');
           if (isIPDBill) return false;
 
           const patient = transaction.patient;
@@ -597,33 +487,33 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         }) || [];
 
         console.log(`📊 EnhancedDashboard - Filtered ${allRevenueData?.length || 0} to ${revenueData.length} transactions (excluded ${(allRevenueData?.length || 0) - revenueData.length} ORTHO/HEMANT)`);
-        
+
         if (dateRange) {
           const startDateStr = dateRange.start.toISOString().split('T')[0];
           const endDateStr = dateRange.end.toISOString().split('T')[0];
-          
+
           revenueData = revenueData?.filter(transaction => {
             // 🔍 FIXED PRIORITY: For services, prioritize transaction date over patient registration date
             let effectiveDateStr;
             if (transaction.transaction_date && transaction.transaction_date.trim() !== '') {
               // Priority 1: Transaction's transaction_date (when the service was actually provided)
-              effectiveDateStr = transaction.transaction_date.includes('T') 
-                ? transaction.transaction_date.split('T')[0] 
+              effectiveDateStr = transaction.transaction_date.includes('T')
+                ? transaction.transaction_date.split('T')[0]
                 : transaction.transaction_date;
             } else if (transaction.patient?.date_of_entry && transaction.patient.date_of_entry.trim() !== '') {
               // Priority 2: Patient's date_of_entry (for backdated patient registrations)
-              effectiveDateStr = transaction.patient.date_of_entry.includes('T') 
-                ? transaction.patient.date_of_entry.split('T')[0] 
+              effectiveDateStr = transaction.patient.date_of_entry.includes('T')
+                ? transaction.patient.date_of_entry.split('T')[0]
                 : transaction.patient.date_of_entry;
             } else {
               // Priority 3: Transaction's created_at date (fallback)
               effectiveDateStr = transaction.created_at.split('T')[0];
             }
-            
+
             return effectiveDateStr >= startDateStr && effectiveDateStr <= endDateStr;
           }) || [];
         }
-        
+
         // Debug revenue calculation
         const excludedCount = (allRevenueData?.length || 0) - (allRevenueData?.filter(t => {
           const dept = t.patient?.assigned_department?.toUpperCase()?.trim() || '';
@@ -633,26 +523,26 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           const isDrHemantOnly = doc === 'DR. HEMANT' || doc === 'DR HEMANT';
           return !(isOrthoDeptOnly && isDrHemantOnly);
         })?.length || 0);
-        
+
         // 🔍 DEBUG: Check for today's transactions specifically
         const todayStr = new Date().toISOString().split('T')[0];
         const todaysTransactions = revenueData?.filter(transaction => {
           let effectiveDateStr;
           // 🔍 FIXED PRIORITY: For services, prioritize transaction date over patient registration date
           if (transaction.transaction_date && transaction.transaction_date.trim() !== '') {
-            effectiveDateStr = transaction.transaction_date.includes('T') 
-              ? transaction.transaction_date.split('T')[0] 
+            effectiveDateStr = transaction.transaction_date.includes('T')
+              ? transaction.transaction_date.split('T')[0]
               : transaction.transaction_date;
           } else if (transaction.patient?.date_of_entry && transaction.patient.date_of_entry.trim() !== '') {
-            effectiveDateStr = transaction.patient.date_of_entry.includes('T') 
-              ? transaction.patient.date_of_entry.split('T')[0] 
+            effectiveDateStr = transaction.patient.date_of_entry.includes('T')
+              ? transaction.patient.date_of_entry.split('T')[0]
               : transaction.patient.date_of_entry;
           } else {
             effectiveDateStr = transaction.created_at.split('T')[0];
           }
           return effectiveDateStr === todayStr;
         }) || [];
-        
+
         console.log('🚨 TODAY REVENUE TRANSACTIONS DEBUG:', {
           todayStr,
           currentDateFilter: dateFilter,
@@ -668,14 +558,14 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             patientId: t.patient?.id,
             createdAt: t.created_at,
             transactionDate: t.transaction_date,
-            effectiveDate: t.patient?.date_of_entry && t.patient.date_of_entry.trim() !== '' 
+            effectiveDate: t.patient?.date_of_entry && t.patient.date_of_entry.trim() !== ''
               ? (t.patient.date_of_entry.includes('T') ? t.patient.date_of_entry.split('T')[0] : t.patient.date_of_entry)
-              : (t.transaction_date && t.transaction_date.trim() !== '' 
+              : (t.transaction_date && t.transaction_date.trim() !== ''
                 ? (t.transaction_date.includes('T') ? t.transaction_date.split('T')[0] : t.transaction_date)
                 : t.created_at.split('T')[0])
           }))
         });
-        
+
         console.log('💰 Dashboard Revenue Debug (FIXED):', {
           filter: dateFilter,
           dateRange: dateRange ? {
@@ -691,17 +581,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             // Show the effective date being used
             let effectiveDateStr;
             if (t.patient?.date_of_entry && t.patient.date_of_entry.trim() !== '') {
-              effectiveDateStr = t.patient.date_of_entry.includes('T') 
-                ? t.patient.date_of_entry.split('T')[0] 
+              effectiveDateStr = t.patient.date_of_entry.includes('T')
+                ? t.patient.date_of_entry.split('T')[0]
                 : t.patient.date_of_entry;
             } else if (t.transaction_date && t.transaction_date.trim() !== '') {
-              effectiveDateStr = t.transaction_date.includes('T') 
-                ? t.transaction_date.split('T')[0] 
+              effectiveDateStr = t.transaction_date.includes('T')
+                ? t.transaction_date.split('T')[0]
                 : t.transaction_date;
             } else {
               effectiveDateStr = t.created_at.split('T')[0];
             }
-            
+
             return {
               id: t.id,
               amount: t.amount,
@@ -726,37 +616,37 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
 
         // Get ALL expenses using pagination - we'll filter in JavaScript for consistency
         const allExpenseData = await fetchAllExpenses();
-        
+
         // Apply date filtering for expenses if not 'all'
         let expenseData = allExpenseData;
         if (dateRange) {
           const startDateStr = dateRange.start.toISOString().split('T')[0];
           const endDateStr = dateRange.end.toISOString().split('T')[0];
-          
+
           expenseData = allExpenseData.filter(expense => {
             if (!expense.expense_date) return false;
-            const expenseDate = expense.expense_date.includes('T') 
-              ? expense.expense_date.split('T')[0] 
+            const expenseDate = expense.expense_date.includes('T')
+              ? expense.expense_date.split('T')[0]
               : expense.expense_date;
             return expenseDate >= startDateStr && expenseDate <= endDateStr;
           });
         }
-        
+
         // ADDED: Query refunds to match operations ledger calculation using pagination
         const allRefundData = await fetchAllRefunds();
-        
+
         // Apply date filtering for refunds if not 'all'
         let refunds = allRefundData;
         if (dateRange) {
           const startDate = dateRange.start.toISOString();
           const endDate = dateRange.end.toISOString();
-          
+
           refunds = allRefundData.filter(refund => {
             if (!refund.created_at) return false;
             return refund.created_at >= startDate && refund.created_at <= endDate;
           });
         }
-        
+
         console.log('↩️ Dashboard Refunds Debug:', {
           filter: dateFilter,
           refundCount: refunds?.length || 0,
@@ -794,11 +684,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           sortBy: 'scheduled_at',
           sortOrder: 'asc',
         });
-        
+
         // Also get appointments from localStorage
         const localStorageAppointments = localStorage.getItem('hospital_appointments');
         const localAppointments = localStorageAppointments ? JSON.parse(localStorageAppointments) : [];
-        
+
         // Convert localStorage appointments to match the expected format
         const formattedLocalAppointments = localAppointments.map((apt: any) => ({
           id: apt.id,
@@ -806,9 +696,9 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           doctor_name: apt.doctor_name,
           department: apt.department,
           // Handle both formats: if scheduled_at exists use it, otherwise combine date and time
-          scheduled_at: apt.scheduled_at || 
-            (apt.appointment_date && apt.appointment_time 
-              ? `${apt.appointment_date}T${apt.appointment_time}:00` 
+          scheduled_at: apt.scheduled_at ||
+            (apt.appointment_date && apt.appointment_time
+              ? `${apt.appointment_date}T${apt.appointment_time}:00`
               : new Date().toISOString()),
           appointment_type: apt.appointment_type,
           status: apt.status,
@@ -817,34 +707,34 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           estimated_cost: apt.estimated_cost,
           created_at: apt.created_at
         }));
-        
+
         // Combine both sources (avoid duplicates by checking IDs)
         const existingIds = new Set((result.data || []).map((a: any) => a.id));
         const uniqueLocalAppointments = formattedLocalAppointments.filter((a: any) => !existingIds.has(a.id));
         const combinedData = [...(result.data || []), ...uniqueLocalAppointments];
-        
+
         console.log('📅 Dashboard Appointments - DB:', result.data?.length || 0, 'LocalStorage:', uniqueLocalAppointments.length);
-        
-        return { 
-          data: combinedData, 
-          count: combinedData.length 
+
+        return {
+          data: combinedData,
+          count: combinedData.length
         };
       } catch (error) {
         console.warn('Could not fetch appointments from service, using localStorage:', error);
-        
+
         // Fallback to localStorage only
         const localStorageAppointments = localStorage.getItem('hospital_appointments');
         const localAppointments = localStorageAppointments ? JSON.parse(localStorageAppointments) : [];
-        
+
         const formattedLocalAppointments = localAppointments.map((apt: any) => ({
           id: apt.id,
           patient_name: apt.patient_name,
           doctor_name: apt.doctor_name,
           department: apt.department,
           // Handle both formats: if scheduled_at exists use it, otherwise combine date and time
-          scheduled_at: apt.scheduled_at || 
-            (apt.appointment_date && apt.appointment_time 
-              ? `${apt.appointment_date}T${apt.appointment_time}:00` 
+          scheduled_at: apt.scheduled_at ||
+            (apt.appointment_date && apt.appointment_time
+              ? `${apt.appointment_date}T${apt.appointment_time}:00`
               : new Date().toISOString()),
           appointment_type: apt.appointment_type,
           status: apt.status,
@@ -853,7 +743,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           estimated_cost: apt.estimated_cost,
           created_at: apt.created_at
         }));
-        
+
         return { data: formattedLocalAppointments, count: formattedLocalAppointments.length };
       }
     },
@@ -869,7 +759,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       customEndDate,
       showDatePicker
     });
-    
+
     try {
       console.log('🔄 Refreshing all dashboard data...');
       await Promise.all([
@@ -897,12 +787,12 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     };
 
     window.addEventListener('storage', handleStorageChange);
-    
+
     // Also check for changes from same tab (storage event doesn't fire for same tab)
     const interval = setInterval(() => {
       refetchAppointments();
     }, 30000); // Refresh every 30 seconds
-    
+
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       clearInterval(interval);
@@ -917,14 +807,14 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       if (localStorageAppointments) {
         const appointments = JSON.parse(localStorageAppointments);
         const appointmentIndex = appointments.findIndex((apt: any) => apt.id === appointmentId);
-        
+
         if (appointmentIndex !== -1) {
           const appointment = appointments[appointmentIndex];
-          
+
           // Remove the appointment from localStorage completely (confirmed appointments don't stay on dashboard)
           appointments.splice(appointmentIndex, 1);
           localStorage.setItem('hospital_appointments', JSON.stringify(appointments));
-          
+
           // Log the confirmation for audit purposes
           console.log('✅ Appointment confirmed and removed from dashboard:', {
             id: appointment.id,
@@ -933,18 +823,18 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             time: appointment.appointment_time,
             confirmed_at: new Date().toISOString()
           });
-          
+
           toast.success(`Appointment confirmed for ${appointment.patient_name}! Patient is now visible in patient list.`);
           refetchAppointments();
           refetchPatients(); // Refresh patient list to show the now-visible patient
           return;
         }
       }
-      
+
       // If not in localStorage, try to update in database
       const { appointmentService } = await import('../services/appointmentService');
       await appointmentService.updateAppointment(appointmentId, { status: 'confirmed' });
-      
+
       toast.success('Appointment confirmed successfully!');
       refetchAppointments();
     } catch (error) {
@@ -958,17 +848,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     if (!confirm('Are you sure you want to cancel this appointment? This will remove it from the list and may also remove the patient if they were created only for this appointment.')) {
       return;
     }
-    
+
     try {
       // Check if it's a localStorage appointment
       const localStorageAppointments = localStorage.getItem('hospital_appointments');
       if (localStorageAppointments) {
         const appointments = JSON.parse(localStorageAppointments);
         const appointmentIndex = appointments.findIndex((apt: any) => apt.id === appointmentId);
-        
+
         if (appointmentIndex !== -1) {
           const cancelledAppointment = appointments[appointmentIndex];
-          
+
           // If appointment has patient_uuid, delete the patient directly
           if (cancelledAppointment.patient_uuid) {
             try {
@@ -987,11 +877,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             // Fallback to old method for appointments without patient_uuid
             await handlePatientDeletionForCancelledAppointment(cancelledAppointment.patient_name);
           }
-          
+
           // Remove the appointment from localStorage completely
           appointments.splice(appointmentIndex, 1);
           localStorage.setItem('hospital_appointments', JSON.stringify(appointments));
-          
+
           // Log the cancellation for audit purposes
           console.log('🗑️ Appointment cancelled and removed:', {
             id: appointmentId,
@@ -1000,17 +890,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             time: cancelledAppointment.appointment_time,
             cancelled_at: new Date().toISOString()
           });
-          
+
           refetchAppointments();
           // Also refresh patient data in case a patient was deleted
           refetchPatients();
           return;
         }
       }
-      
+
       // If not in localStorage, try to delete from database
       const { appointmentService } = await import('../services/appointmentService');
-      
+
       // Try to delete the appointment if the service supports it
       if (appointmentService.deleteAppointment) {
         await appointmentService.deleteAppointment(appointmentId);
@@ -1018,7 +908,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         // Fallback to updating status if delete is not available
         await appointmentService.updateAppointment(appointmentId, { status: 'cancelled' });
       }
-      
+
       toast.success('Appointment cancelled and removed');
       refetchAppointments();
     } catch (error) {
@@ -1030,22 +920,22 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
   // Handle patient deletion when appointment is cancelled
   const handlePatientDeletionForCancelledAppointment = async (patientName: string) => {
     console.log('🔍 Starting patient deletion check for cancelled appointment:', patientName);
-    
+
     try {
       // Import HospitalService to interact with patients
       const HospitalService = (await import('../services/hospitalService')).default;
-      
+
       // Get all patients to find the one with matching name
       console.log('📋 Fetching all patients to find match...');
       const allPatients = await HospitalService.getPatients(50000, true, true);
       console.log(`📊 Total patients in database: ${allPatients.length}`);
-      
-      const matchingPatients = allPatients.filter((patient: any) => 
+
+      const matchingPatients = allPatients.filter((patient: any) =>
         `${patient.first_name} ${patient.last_name}` === patientName
       );
-      
+
       console.log(`🔎 Found ${matchingPatients.length} patients matching name "${patientName}"`);
-      
+
       if (matchingPatients.length === 0) {
         console.log('🔍 No matching patient found for:', patientName);
         toast(`No patient found with name: ${patientName}`, {
@@ -1054,14 +944,14 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         });
         return;
       }
-      
+
       // If multiple patients with same name, be cautious
       if (matchingPatients.length > 1) {
         console.warn('⚠️ Multiple patients found with name:', patientName, 'Skipping deletion for safety');
         toast.warning(`Multiple patients found with name "${patientName}". Skipping deletion for safety.`);
         return;
       }
-      
+
       const patient = matchingPatients[0];
       console.log('👤 Patient details:', {
         id: patient.id,
@@ -1071,28 +961,28 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         transactions_count: patient.transactions ? patient.transactions.length : 0,
         admissions_count: patient.admissions ? patient.admissions.length : 0
       });
-      
+
       // Check if patient has any transactions (indicating they've had services)
       const hasTransactions = patient.transactions && patient.transactions.length > 0;
       console.log(`💳 Has transactions: ${hasTransactions} (${patient.transactions ? patient.transactions.length : 0} transactions)`);
-      
+
       // Check if patient has any admissions
       const hasAdmissions = patient.admissions && patient.admissions.length > 0;
       console.log(`🏥 Has admissions: ${hasAdmissions} (${patient.admissions ? patient.admissions.length : 0} admissions)`);
-      
+
       // Check if patient was created recently (within last 24 hours - indicating they were likely created for the appointment)
       const patientCreatedAt = new Date(patient.created_at);
       const now = new Date();
       const hoursSinceCreation = (now.getTime() - patientCreatedAt.getTime()) / (1000 * 60 * 60);
       const isRecentlyCreated = hoursSinceCreation <= 24;
-      
+
       console.log(`⏰ Patient creation details:`, {
         created_at: patientCreatedAt.toISOString(),
         current_time: now.toISOString(),
         hours_since_creation: hoursSinceCreation.toFixed(2),
         is_recently_created: isRecentlyCreated
       });
-      
+
       // Only delete if patient has no activity AND was created recently
       const shouldDelete = !hasTransactions && !hasAdmissions && isRecentlyCreated;
       console.log(`🤔 Should delete patient? ${shouldDelete}`, {
@@ -1100,7 +990,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         no_admissions: !hasAdmissions,
         recently_created: isRecentlyCreated
       });
-      
+
       if (shouldDelete) {
         console.log('🗑️ Deleting patient created for cancelled appointment:', {
           name: patientName,
@@ -1109,7 +999,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           created: patientCreatedAt,
           hours_ago: hoursSinceCreation.toFixed(1)
         });
-        
+
         await HospitalService.deletePatient(patient.id);
         console.log('✅ Patient successfully deleted from database');
         toast.success(`Patient ${patientName} also removed (was created only for this appointment)`);
@@ -1122,12 +1012,12 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           isRecentlyCreated,
           hours_ago: hoursSinceCreation.toFixed(1)
         });
-        
+
         const reason = [];
         if (hasTransactions) reason.push('has transactions');
         if (hasAdmissions) reason.push('has admissions');
         if (!isRecentlyCreated) reason.push('not recently created');
-        
+
         toast(`Patient ${patientName} kept (${reason.join(', ')})`, {
           icon: 'ℹ️',
           duration: 3000,
@@ -1144,11 +1034,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     // CONSISTENCY FIX: Use same filtering logic as breakdown
     let totalPatients = 0;
     let totalRevenue = 0;
-    
+
     if (dateFilter === 'today') {
       // For 'today' filter, count actual today's patients using robust date comparison
       const todayStr = formatDateString(new Date());
-      
+
       // 🔧 DATA VALIDATION: Check if patient data exists
       const allPatients = allPatientsData || [];
       console.log('👥 PATIENT DATA VALIDATION:', {
@@ -1159,24 +1049,24 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           name: `${p.first_name} ${p.last_name}`,
           date_of_entry: p.date_of_entry,
           created_at: p.created_at,
-          effectiveDate: p.date_of_entry && p.date_of_entry.trim() !== '' 
-            ? p.date_of_entry 
+          effectiveDate: p.date_of_entry && p.date_of_entry.trim() !== ''
+            ? p.date_of_entry
             : p.created_at?.split('T')[0]
         }))
       });
-      
+
       // Count patients for today using ROBUST date comparison
       const todaysPatients = allPatients.filter((p: any) => {
         // Determine effective date for this patient
-        const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== '' 
+        const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== ''
           ? p.date_of_entry
           : p.created_at;
-          
+
         return isSameDate(effectiveDate, todayStr);
       });
-      
+
       totalPatients = todaysPatients.length;
-      
+
       console.log('👥 TODAY PATIENT FILTERING DEBUG:', {
         todayStr,
         totalPatients: allPatients.length,
@@ -1187,7 +1077,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           effectiveDate: p.date_of_entry || p.created_at?.split('T')[0]
         }))
       });
-      
+
       // 🔧 DATA VALIDATION: Check if revenue data exists
       const allRevenue = operationsData?.revenue || [];
       console.log('💰 REVENUE DATA VALIDATION:', {
@@ -1202,7 +1092,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           description: r.description
         }))
       });
-      
+
       // Count revenue for today using ROBUST date comparison
       const todaysRevenue = allRevenue.filter((r: any) => {
         // Determine effective date with same priority as before
@@ -1214,12 +1104,12 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         } else {
           effectiveDate = r.created_at;
         }
-        
+
         return isSameDate(effectiveDate, todayStr);
       });
-      
+
       totalRevenue = todaysRevenue.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
-      
+
       console.log('💰 TODAY REVENUE FILTERING DEBUG:', {
         todayStr,
         allRevenueCount: allRevenue.length,
@@ -1234,7 +1124,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           effectiveDate: r.transaction_date || r.patient?.date_of_entry || r.created_at?.split('T')[0]
         }))
       });
-      
+
       console.log('🏠 Dashboard Home Consistency Fix:', {
         filter: dateFilter,
         todayStr,
@@ -1247,24 +1137,24 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       // 🔧 FIXED: For 'week' filter, apply same robust date filtering logic as breakdown modal
       const weekToday = new Date();
       const weekTodayStr = formatDateString(weekToday);
-      
+
       // Week: Last 7 days INCLUDING today (6 days ago + today = 7 days total)
       const weekStartDate = new Date(weekToday);
       weekStartDate.setDate(weekToday.getDate() - 6); // Same logic as breakdown modal
       const weekStartStr = formatDateString(weekStartDate);
-      
+
       // 🔧 Count patients for week using ROBUST date comparison (same as breakdown modal)
       const allPatients = allPatientsData || [];
       const weekPatients = allPatients.filter((p: any) => {
-        const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== '' 
+        const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== ''
           ? p.date_of_entry
           : p.created_at;
-          
+
         return isDateInRange(effectiveDate, weekStartStr, weekTodayStr);
       });
-      
+
       totalPatients = weekPatients.length;
-      
+
       // 🔧 Count revenue for week using ROBUST date comparison (same as breakdown modal)
       const allRevenue = operationsData?.revenue || [];
       const weekRevenue = allRevenue.filter((r: any) => {
@@ -1276,12 +1166,12 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         } else {
           effectiveDate = r.created_at;
         }
-        
+
         return isDateInRange(effectiveDate, weekStartStr, weekTodayStr);
       });
-      
+
       totalRevenue = weekRevenue.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
-      
+
       console.log('📅 MAIN CARD WEEK CALCULATION (FIXED - matches breakdown modal):', {
         filter: dateFilter,
         weekRange: `${weekStartStr} to ${weekTodayStr} (Last 7 days)`,
@@ -1295,15 +1185,15 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     } else {
       // For other filters, use the existing filtered data
       totalPatients = patientsData?.length || 0;
-      totalRevenue = operationsData?.revenue.reduce((sum: number, transaction: any) => 
+      totalRevenue = operationsData?.revenue.reduce((sum: number, transaction: any) =>
         sum + (transaction.amount || 0), 0) || 0;
     }
-    
+
     // Filter beds based on admission dates for admissions card
     let filteredAdmissions = 0;
     if (dateFilter === 'all') {
       // For 'all', show currently occupied beds
-      filteredAdmissions = bedsData?.filter(bed => 
+      filteredAdmissions = bedsData?.filter(bed =>
         bed.status === 'occupied' || bed.status === 'OCCUPIED'
       ).length || 0;
     } else {
@@ -1313,25 +1203,25 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         filteredAdmissions = bedsData.filter(bed => {
           if (bed.status !== 'occupied' && bed.status !== 'OCCUPIED') return false;
           if (!bed.admission_date) return false;
-          
+
           const admissionDate = new Date(bed.admission_date);
           return admissionDate >= dateRange.start && admissionDate <= dateRange.end;
         }).length;
       }
     }
-    
+
     // Available beds (not affected by date filter - always current status)
-    const availableBeds = bedsData?.filter(bed => 
+    const availableBeds = bedsData?.filter(bed =>
       bed.status === 'vacant' || bed.status === 'AVAILABLE'
     ).length || 0;
-    
+
     // 🔧 FIX: Apply date filtering for expenses to match breakdown modal consistency
     let totalExpenses = 0;
-    
+
     if (dateFilter === 'today') {
       // For 'today' filter, count only today's expenses using robust date comparison
       const todayStr = formatDateString(new Date());
-      
+
       // 🔧 DATA VALIDATION: Check if expense data exists
       const allExpenses = operationsData?.expenses || [];
       console.log('💸 EXPENSE DATA VALIDATION:', {
@@ -1345,15 +1235,15 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           description: e.description
         }))
       });
-      
+
       const todaysExpenses = allExpenses.filter((expense: any) => {
         if (!expense.expense_date) return false;
         return isSameDate(expense.expense_date, todayStr);
       });
-      
-      totalExpenses = todaysExpenses.reduce((sum: number, expense: any) => 
+
+      totalExpenses = todaysExpenses.reduce((sum: number, expense: any) =>
         sum + (expense.amount || 0), 0);
-        
+
       console.log('💸 TODAY EXPENSE FILTERING DEBUG:', {
         todayStr,
         allExpensesCount: allExpenses.length,
@@ -1371,21 +1261,21 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       // 🔧 FIXED: For 'week' filter, apply same robust date filtering logic as breakdown modal
       const weekToday = new Date();
       const weekTodayStr = formatDateString(weekToday);
-      
+
       // Week: Last 7 days INCLUDING today (6 days ago + today = 7 days total)
       const weekStartDate = new Date(weekToday);
       weekStartDate.setDate(weekToday.getDate() - 6); // Same logic as breakdown modal
       const weekStartStr = formatDateString(weekStartDate);
-      
+
       // 🔧 Count expenses for week using ROBUST date comparison (same as breakdown modal)
       const allExpenses = operationsData?.expenses || [];
       const weekExpenses = allExpenses.filter((e: any) => {
         if (!e.expense_date) return false;
         return isDateInRange(e.expense_date, weekStartStr, weekTodayStr);
       });
-      
+
       totalExpenses = weekExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-      
+
       console.log('💸 MAIN CARD WEEK EXPENSE CALCULATION (FIXED - matches breakdown modal):', {
         filter: dateFilter,
         weekRange: `${weekStartStr} to ${weekTodayStr} (Last 7 days)`,
@@ -1396,15 +1286,15 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       });
     } else {
       // For other filters, use existing filtered data
-      totalExpenses = operationsData?.expenses.reduce((sum: number, expense: any) => 
+      totalExpenses = operationsData?.expenses.reduce((sum: number, expense: any) =>
         sum + (expense.amount || 0), 0) || 0;
     }
-    const totalRefunds = operationsData?.refunds?.reduce((sum: number, refund: any) => 
+    const totalRefunds = operationsData?.refunds?.reduce((sum: number, refund: any) =>
       sum + (refund.amount || 0), 0) || 0;
-    
+
     // Calculate net revenue matching operations ledger formula
     const netRevenue = totalRevenue - totalExpenses - totalRefunds;
-    
+
     // 🔧 COMPREHENSIVE DEBUG: Final dashboard totals with data validation
     console.log('📊 FINAL DASHBOARD TOTALS (FIXED - robust date handling applied):', {
       filter: dateFilter,
@@ -1446,7 +1336,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
   const handleCardClick = async (cardType: string) => {
     setSelectedCard(cardType);
     setLoadingBreakdown(true);
-    
+
     try {
       const now = new Date();
       // CRITICAL FIX: Don't mutate the original date object
@@ -1465,32 +1355,32 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
         case 'patients':
           // CONSISTENCY FIX: Use same data source as main card calculation
           console.log('👥 Patient Card Click: Using consistent data source with main card...');
-          
+
           const currentFilteredPatients = patientsData || [];
-          
+
           // Use the SAME all patients data as the main card to ensure consistency
           const allPatientsForBreakdown = allPatientsData || [];
-          
+
           console.log('📊 Data Source Consistency Check:', {
             currentFilter: dateFilter,
             mainCardShowing: cardData.totalPatients,
             currentFilteredLength: currentFilteredPatients.length,
             allPatientsLength: allPatientsForBreakdown.length
           });
-          
+
           // 🔧 FIXED: Use SAME improved date calculation as revenue
           const patientToday = new Date();
           const todayStr = formatDateString(patientToday);
-          
+
           // Week: Last 7 days INCLUDING today (6 days ago to today)
           const weekStartDate = new Date(patientToday);
           weekStartDate.setDate(patientToday.getDate() - 6); // 6 days ago, not 7
           const weekStartStr = formatDateString(weekStartDate);
-          
+
           // Month: From 1st of current month to today
           const monthStartDate = new Date(patientToday.getFullYear(), patientToday.getMonth(), 1);
           const monthStartStr = formatDateString(monthStartDate);
-          
+
           console.log('📅 Patient Card Date Calculations:', {
             currentFilter: dateFilter,
             todayStr,
@@ -1498,23 +1388,23 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             monthStartStr,
             currentFilteredCount: currentFilteredPatients.length
           });
-          
+
           const todayPatients = allPatientsForBreakdown?.filter((p: any) => {
             // 🔧 FIX: Use robust date comparison for today patients  
-            const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== '' 
+            const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== ''
               ? p.date_of_entry
               : p.created_at;
             return isSameDate(effectiveDate, todayStr);
           }) || [];
-          
+
           const weekPatients = allPatientsForBreakdown?.filter((p: any) => {
             // 🔧 FIX: Use robust date range comparison for week patients
-            const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== '' 
+            const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== ''
               ? p.date_of_entry
               : p.created_at;
-              
+
             const isInWeekRange = isDateInRange(effectiveDate, weekStartStr, todayStr);
-            
+
             // Debug for troubleshooting
             if (p.first_name && (p.first_name.includes('TEST') || p.first_name.includes('Debug'))) {
               console.log(`📅 Week Filter Debug - ${p.first_name} ${p.last_name}:`, {
@@ -1525,23 +1415,23 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                 parsedEffective: effectiveDate?.includes('T') ? effectiveDate.split('T')[0] : effectiveDate
               });
             }
-            
+
             return isInWeekRange;
           }) || [];
-          
+
           const monthPatients = allPatientsForBreakdown?.filter((p: any) => {
             // 🔧 FIX: Use robust date range comparison for month patients
-            const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== '' 
+            const effectiveDate = p.date_of_entry && p.date_of_entry.trim() !== ''
               ? p.date_of_entry
               : p.created_at;
             return isDateInRange(effectiveDate, monthStartStr, todayStr);
           }) || [];
-          
+
           console.log('👥 Patient Breakdown Results (FIXED - ROBUST DATE COMPARISONS):', {
             dateTargets: { todayStr, weekStartStr, monthStartStr },
             results: {
               today: todayPatients.length,
-              week: weekPatients.length, 
+              week: weekPatients.length,
               month: monthPatients.length
             },
             todayPatientDetails: todayPatients.slice(0, 5).map(p => ({
@@ -1559,7 +1449,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             thisWeek: { count: weekPatients.length, data: weekPatients },
             thisMonth: { count: monthPatients.length, data: monthPatients },
           };
-          
+
           console.log('📊 Patient Card Breakdown Results:', {
             currentDateFilter: dateFilter,
             mainCardTotalShowing: cardData.totalPatients,
@@ -1579,17 +1469,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               weekPatients: weekPatients.slice(0, 5).map(p => `${p.first_name} ${p.last_name} (${p.date_of_entry || p.created_at.split('T')[0]})`)
             }
           });
-          
+
           break;
 
         case 'admissions':
-          const occupiedBeds = bedsData?.filter(bed => 
+          const occupiedBeds = bedsData?.filter(bed =>
             bed.status === 'occupied' || bed.status === 'OCCUPIED') || [];
-          const todayAdmissions = occupiedBeds.filter(bed => 
+          const todayAdmissions = occupiedBeds.filter(bed =>
             bed.admission_date && new Date(bed.admission_date) >= today);
-          const weekAdmissions = occupiedBeds.filter(bed => 
+          const weekAdmissions = occupiedBeds.filter(bed =>
             bed.admission_date && new Date(bed.admission_date) >= weekStart);
-          const monthAdmissions = occupiedBeds.filter(bed => 
+          const monthAdmissions = occupiedBeds.filter(bed =>
             bed.admission_date && new Date(bed.admission_date) >= monthStart);
 
           breakdown = {
@@ -1600,9 +1490,9 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           break;
 
         case 'beds':
-          const availableBeds = bedsData?.filter(bed => 
+          const availableBeds = bedsData?.filter(bed =>
             bed.status === 'vacant' || bed.status === 'AVAILABLE') || [];
-          
+
           breakdown = {
             today: { count: availableBeds.length, data: availableBeds },
             thisWeek: { count: availableBeds.length, data: availableBeds },
@@ -1618,30 +1508,30 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           //   - Breakdown: patient.date_of_entry FIRST, then transaction_date, then created_at
           // SOLUTION: Both now use SAME data source + SAME date priority logic
           console.log('💰 Revenue Card Click: Using EXACT same data as main dashboard...');
-          
+
           // Use the SAME pre-filtered data that the main dashboard uses for complete consistency
           const allRevenueData = operationsData?.revenue || [];
-          
+
           console.log('💰 Revenue Card: Using main dashboard revenue data for consistency:', {
             transactionCount: allRevenueData.length,
             totalAmount: allRevenueData.reduce((sum: number, t: any) => sum + (t.amount || 0), 0),
             note: 'This ensures 100% consistency between card value and breakdown'
           });
-          
+
           // Use consistent date formatting (formatDateString like main dashboard)
           // 🔧 FIXED: Better week and month calculation logic
           const revenueToday = new Date();
           const revenueTodayStr = formatDateString(revenueToday);
-          
+
           // Week: Last 7 days INCLUDING today (so 6 days ago to today)
           const revenueWeekStartDate = new Date(revenueToday);
           revenueWeekStartDate.setDate(revenueToday.getDate() - 6); // 6 days ago, not 7
           const revenueWeekStr = formatDateString(revenueWeekStartDate);
-          
+
           // Month: From 1st of current month to today  
           const revenueMonthStartDate = new Date(revenueToday.getFullYear(), revenueToday.getMonth(), 1);
           const revenueMonthStr = formatDateString(revenueMonthStartDate);
-          
+
           console.log('📅 Revenue Card Date Setup (FIXED):', {
             today: revenueTodayStr,
             weekRange: `${revenueWeekStr} to ${revenueTodayStr} (Last 7 days)`,
@@ -1658,16 +1548,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             // PRIORITY 1: transaction_date (same as main dashboard)
             if (r.transaction_date && r.transaction_date.trim() !== '') {
               effectiveDate = r.transaction_date;
-            // PRIORITY 2: patient.date_of_entry (same as main dashboard)  
+              // PRIORITY 2: patient.date_of_entry (same as main dashboard)  
             } else if (r.patient?.date_of_entry && r.patient.date_of_entry.trim() !== '') {
               effectiveDate = r.patient.date_of_entry;
-            // PRIORITY 3: created_at (same as main dashboard)
+              // PRIORITY 3: created_at (same as main dashboard)
             } else {
               effectiveDate = r.created_at;
             }
             return isSameDate(effectiveDate, revenueTodayStr);
           });
-          
+
           // 🔍 DEBUG: Sample the first few transactions to see date formats
           console.log('💰 WEEK REVENUE DEBUG - Sample transactions:', {
             totalTransactions: allRevenueData.length,
@@ -1695,7 +1585,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               effectiveDate = r.created_at;
             }
             const result = isDateInRange(effectiveDate, revenueWeekStr, revenueTodayStr);
-            
+
             // Log the first few matches for debugging
             if (result && weekMatchCount < 3) {
               weekMatchCount++;
@@ -1705,10 +1595,10 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                 amount: r.amount
               });
             }
-            
+
             return result;
           });
-          
+
           const monthRevenue = allRevenueData.filter((r: any) => {
             // 🔧 FIX: Use robust date range comparison for month revenue
             let effectiveDate;
@@ -1727,11 +1617,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           const todayRevenueAmount = todayRevenue.reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
           const weekRevenueAmount = weekRevenue.reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
           const monthRevenueAmount = monthRevenue.reduce((sum: number, r: any) => sum + (r.amount || 0), 0);
-          
+
           // Calculate service/transaction type breakdown for revenue analysis
           const getServiceBreakdown = (transactions: any[]) => {
             const serviceBreakdown: { [key: string]: { count: number; amount: number; transactions: any[] } } = {};
-            
+
             transactions.forEach(t => {
               const serviceType = t.transaction_type || 'Other';
               if (!serviceBreakdown[serviceType]) {
@@ -1741,7 +1631,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               serviceBreakdown[serviceType].amount += t.amount || 0;
               serviceBreakdown[serviceType].transactions.push(t);
             });
-            
+
             return serviceBreakdown;
           };
 
@@ -1757,7 +1647,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             },
             counts: {
               todayTransactions: todayRevenue.length,
-              weekTransactions: weekRevenue.length,  
+              weekTransactions: weekRevenue.length,
               monthTransactions: monthRevenue.length
             },
             amounts: {
@@ -1790,28 +1680,28 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               amount: r.amount,
               service: r.transaction_type,
               patientName: `${r.patient?.first_name} ${r.patient?.last_name}`,
-              effectiveDate: r.patient?.date_of_entry && r.patient.date_of_entry.trim() !== '' 
+              effectiveDate: r.patient?.date_of_entry && r.patient.date_of_entry.trim() !== ''
                 ? (r.patient.date_of_entry.includes('T') ? r.patient.date_of_entry.split('T')[0] : r.patient.date_of_entry)
                 : r.transaction_date && r.transaction_date.trim() !== ''
-                ? (r.transaction_date.includes('T') ? r.transaction_date.split('T')[0] : r.transaction_date) 
-                : r.created_at.split('T')[0],
+                  ? (r.transaction_date.includes('T') ? r.transaction_date.split('T')[0] : r.transaction_date)
+                  : r.created_at.split('T')[0],
               dept: r.patient?.assigned_department,
               doctor: r.patient?.assigned_doctor
             })),
             // Check for problematic dates
             august13Revenue: todayRevenue.filter(r => {
-              const effectiveDate = r.patient?.date_of_entry && r.patient.date_of_entry.trim() !== '' 
+              const effectiveDate = r.patient?.date_of_entry && r.patient.date_of_entry.trim() !== ''
                 ? (r.patient.date_of_entry.includes('T') ? r.patient.date_of_entry.split('T')[0] : r.patient.date_of_entry)
                 : r.transaction_date && r.transaction_date.trim() !== ''
-                ? (r.transaction_date.includes('T') ? r.transaction_date.split('T')[0] : r.transaction_date) 
-                : r.created_at.split('T')[0];
+                  ? (r.transaction_date.includes('T') ? r.transaction_date.split('T')[0] : r.transaction_date)
+                  : r.created_at.split('T')[0];
               return effectiveDate === '2025-08-13';
             }).length
           });
 
           breakdown = {
-            today: { 
-              count: todayRevenueAmount, 
+            today: {
+              count: todayRevenueAmount,
               data: todayRevenue,
               serviceBreakdown: todayServiceBreakdown,
               topServices: Object.entries(todayServiceBreakdown)
@@ -1824,8 +1714,8 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                 .sort((a, b) => b.amount - a.amount)
                 .slice(0, 5) // Top 5 services
             },
-            thisWeek: { 
-              count: weekRevenueAmount, 
+            thisWeek: {
+              count: weekRevenueAmount,
               data: weekRevenue,
               serviceBreakdown: weekServiceBreakdown,
               topServices: Object.entries(weekServiceBreakdown)
@@ -1838,8 +1728,8 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                 .sort((a, b) => b.amount - a.amount)
                 .slice(0, 5) // Top 5 services
             },
-            thisMonth: { 
-              count: monthRevenueAmount, 
+            thisMonth: {
+              count: monthRevenueAmount,
               data: monthRevenue,
               serviceBreakdown: monthServiceBreakdown,
               topServices: Object.entries(monthServiceBreakdown)
@@ -1859,16 +1749,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           // 🔧 FIXED: Use SAME improved date calculation as revenue and patient
           const expenseToday = new Date();
           const expenseTodayStr = formatDateString(expenseToday);
-          
+
           // Week: Last 7 days INCLUDING today (6 days ago to today)  
           const expenseWeekStartDate = new Date(expenseToday);
           expenseWeekStartDate.setDate(expenseToday.getDate() - 6); // 6 days ago, not 7
           const expenseWeekStr = formatDateString(expenseWeekStartDate);
-          
+
           // Month: From 1st of current month to today
           const expenseMonthStartDate = new Date(expenseToday.getFullYear(), expenseToday.getMonth(), 1);
           const expenseMonthStr = formatDateString(expenseMonthStartDate);
-          
+
           console.log('💸 EXPENSE BREAKDOWN DEBUG (FIXED):', {
             today: expenseTodayStr,
             weekRange: `${expenseWeekStr} to ${expenseTodayStr} (Last 7 days)`,
@@ -1879,8 +1769,8 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               monthDays: Math.ceil((today.getTime() - expenseMonthStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
             }
           });
-          
-          const todayExpenses = operationsData?.expenses.filter((e: any) => 
+
+          const todayExpenses = operationsData?.expenses.filter((e: any) =>
             e.expense_date && isSameDate(e.expense_date, expenseTodayStr)) || [];
           const weekExpenses = operationsData?.expenses.filter((e: any) => {
             if (!e.expense_date) return false;
@@ -1895,7 +1785,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           const todayExpenseAmount = todayExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
           const weekExpenseAmount = weekExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
           const monthExpenseAmount = monthExpenses.reduce((sum: number, e: any) => sum + (e.amount || 0), 0);
-          
+
           console.log('💸 EXPENSE BREAKDOWN RESULTS:', {
             today: { count: todayExpenses.length, amount: todayExpenseAmount },
             week: { count: weekExpenses.length, amount: weekExpenseAmount },
@@ -1909,17 +1799,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           });
 
           breakdown = {
-            today: { 
+            today: {
               count: todayExpenseAmount,
-              data: todayExpenses 
+              data: todayExpenses
             },
-            thisWeek: { 
+            thisWeek: {
               count: weekExpenseAmount,
-              data: weekExpenses 
+              data: weekExpenses
             },
-            thisMonth: { 
+            thisMonth: {
               count: monthExpenseAmount,
-              data: monthExpenses 
+              data: monthExpenses
             },
           };
           break;
@@ -1951,32 +1841,32 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     const firstDay = new Date(year, month, 1);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - firstDay.getDay());
-    
+
     const days = [];
     const endDate = new Date(startDate);
     endDate.setDate(endDate.getDate() + 41);
-    
+
     for (let date = new Date(startDate); date < endDate; date.setDate(date.getDate() + 1)) {
       days.push(new Date(date));
     }
-    
+
     return days;
   };
 
   // Filter appointments for selected date and next 7 days (exclude cancelled)
   const getUpcomingAppointments = () => {
     if (!appointmentsData?.data) return [];
-    
+
     const startDate = new Date(selectedDate);
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(selectedDate);
     endDate.setDate(endDate.getDate() + 7);
     endDate.setHours(23, 59, 59, 999);
-    
+
     return appointmentsData.data.filter((appointment: any) => {
       // Exclude cancelled appointments
       if (appointment.status === 'cancelled') return false;
-      
+
       const appointmentDate = new Date(appointment.scheduled_at);
       return appointmentDate >= startDate && appointmentDate <= endDate;
     }).slice(0, 10);
@@ -2007,7 +1897,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               <Filter className="h-5 w-5" style={{ color: '#0056B3' }} />
               <span className="font-medium">Filter by Date:</span>
             </div>
-            
+
             {/* Quick Filter Buttons */}
             <div className="flex items-center gap-2">
               {[
@@ -2027,11 +1917,10 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                       setShowDatePicker(false);
                     }
                   }}
-                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                    dateFilter === filter.value
-                      ? 'text-white shadow-sm'
-                      : 'bg-white text-[#333333] hover:bg-[#f8f9fa] border border-gray-200'
-                  }`}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${dateFilter === filter.value
+                    ? 'text-white shadow-sm'
+                    : 'bg-white text-[#333333] hover:bg-[#f8f9fa] border border-gray-200'
+                    }`}
                   style={dateFilter === filter.value ? { backgroundColor: '#0056B3' } : {}}
                 >
                   {filter.label}
@@ -2041,7 +1930,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           </div>
 
           {/* Refresh Button */}
-          <Button 
+          <Button
             onClick={handleRefreshData}
             className="text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:opacity-90"
             style={{ backgroundColor: '#0056B3' }}
@@ -2123,7 +2012,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
       <div className="px-6 pb-6">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           {/* Total Patients Card */}
-          <div 
+          <div
             className="bg-white rounded-lg p-6 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
             onClick={() => handleCardClick('patients')}
           >
@@ -2135,16 +2024,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               {cardData.totalPatients.toLocaleString()}
             </div>
             <p className="text-xs text-[#999999]">
-              {dateFilter === 'all' ? 'All time' : 
-               dateFilter === 'today' ? 'Today only' :
-               dateFilter === 'week' ? 'Last 7 days' :
-               dateFilter === 'month' ? 'This month' :
-               'Custom range'}
+              {dateFilter === 'all' ? 'All time' :
+                dateFilter === 'today' ? 'Today only' :
+                  dateFilter === 'week' ? 'Last 7 days' :
+                    dateFilter === 'month' ? 'This month' :
+                      'Custom range'}
             </p>
           </div>
 
           {/* Admissions Card */}
-          <div 
+          <div
             className="bg-white rounded-lg p-6 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
             onClick={() => handleCardClick('admissions')}
           >
@@ -2156,16 +2045,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               {cardData.admissions.toString()}
             </div>
             <p className="text-xs text-[#999999]">
-              {dateFilter === 'all' ? 'All time' : 
-               dateFilter === 'today' ? 'Today only' :
-               dateFilter === 'week' ? 'Last 7 days' :
-               dateFilter === 'month' ? 'This month' :
-               'Custom range'}
+              {dateFilter === 'all' ? 'All time' :
+                dateFilter === 'today' ? 'Today only' :
+                  dateFilter === 'week' ? 'Last 7 days' :
+                    dateFilter === 'month' ? 'This month' :
+                      'Custom range'}
             </p>
           </div>
 
           {/* Available Beds Card */}
-          <div 
+          <div
             className="bg-white rounded-lg p-6 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
             onClick={() => handleCardClick('beds')}
           >
@@ -2177,16 +2066,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               {cardData.availableBeds.toString()}
             </div>
             <p className="text-xs text-[#999999]">
-              {dateFilter === 'all' ? 'All time' : 
-               dateFilter === 'today' ? 'Today only' :
-               dateFilter === 'week' ? 'Last 7 days' :
-               dateFilter === 'month' ? 'This month' :
-               'Custom range'}
+              {dateFilter === 'all' ? 'All time' :
+                dateFilter === 'today' ? 'Today only' :
+                  dateFilter === 'week' ? 'Last 7 days' :
+                    dateFilter === 'month' ? 'This month' :
+                      'Custom range'}
             </p>
           </div>
 
           {/* Revenue Card */}
-          <div 
+          <div
             className="bg-white rounded-lg p-6 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
             onClick={() => handleCardClick('revenue')}
           >
@@ -2198,16 +2087,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               {formatCurrency(cardData.revenue)}
             </div>
             <p className="text-xs text-[#999999]">
-              {dateFilter === 'all' ? 'All time' : 
-               dateFilter === 'today' ? 'Today only' :
-               dateFilter === 'week' ? 'Last 7 days' :
-               dateFilter === 'month' ? 'This month' :
-               'Custom range'}
+              {dateFilter === 'all' ? 'All time' :
+                dateFilter === 'today' ? 'Today only' :
+                  dateFilter === 'week' ? 'Last 7 days' :
+                    dateFilter === 'month' ? 'This month' :
+                      'Custom range'}
             </p>
           </div>
 
           {/* Expenses Card */}
-          <div 
+          <div
             className="bg-white rounded-lg p-6 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
             onClick={() => handleCardClick('expenses')}
           >
@@ -2219,11 +2108,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               {formatCurrency(cardData.expenses)}
             </div>
             <p className="text-xs text-[#999999]">
-              {dateFilter === 'all' ? 'All time' : 
-               dateFilter === 'today' ? 'Today only' :
-               dateFilter === 'week' ? 'Last 7 days' :
-               dateFilter === 'month' ? 'This month' :
-               'Custom range'}
+              {dateFilter === 'all' ? 'All time' :
+                dateFilter === 'today' ? 'Today only' :
+                  dateFilter === 'week' ? 'Last 7 days' :
+                    dateFilter === 'month' ? 'This month' :
+                      'Custom range'}
             </p>
           </div>
         </div>
@@ -2234,7 +2123,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
           <div className="bg-white rounded-lg p-6 shadow-sm">
             <h3 className="text-lg font-semibold mb-1" style={{ color: '#0056B3' }}>Appointments Calendar</h3>
             <p className="text-sm text-[#999999] mb-4">Select a date to view scheduled appointments</p>
-            
+
             {/* Calendar Header */}
             <div className="flex items-center justify-between mb-4">
               <button
@@ -2253,7 +2142,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                 <ChevronRight className="h-5 w-5 text-[#333333]" />
               </button>
             </div>
-            
+
             {/* Calendar Grid */}
             <div className="grid grid-cols-7 gap-1 mb-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -2262,27 +2151,26 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                 </div>
               ))}
             </div>
-            
+
             <div className="grid grid-cols-7 gap-1">
               {generateCalendarDays().map((date, index) => {
                 const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
                 const isToday = date.toDateString() === new Date().toDateString();
                 const isSelected = date.toDateString() === selectedDate.toDateString();
-                
+
                 return (
                   <button
                     key={index}
                     onClick={() => setSelectedDate(date)}
                     className={`
                       p-2 text-sm rounded-lg transition-colors
-                      ${
-                        isCurrentMonth
-                          ? isToday
-                            ? 'text-white font-bold'
-                            : isSelected
+                      ${isCurrentMonth
+                        ? isToday
+                          ? 'text-white font-bold'
+                          : isSelected
                             ? 'text-white'
                             : 'text-[#333333] hover:bg-gray-100'
-                          : 'text-[#999999] hover:bg-gray-50'
+                        : 'text-[#999999] hover:bg-gray-50'
                       }
                     `}
                     style={
@@ -2304,8 +2192,8 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             <p className="text-sm text-[#999999] mb-4">
               Showing appointments for {formatSelectedDateRange()}
             </p>
-            
-            
+
+
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {appointmentsLoading ? (
                 <div className="flex items-center justify-center py-8">
@@ -2314,12 +2202,12 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
               ) : (
                 (() => {
                   const upcomingAppointments = getUpcomingAppointments();
-                  
+
                   console.log('📅 EnhancedDashboard - Appointments Debug:');
                   console.log('- Raw appointmentsData:', appointmentsData);
                   console.log('- Filtered upcoming appointments:', upcomingAppointments);
                   console.log('- Count:', upcomingAppointments.length);
-                  
+
                   if (upcomingAppointments.length === 0) {
                     return (
                       <div className="text-center py-8 text-[#999999]">
@@ -2329,14 +2217,14 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                       </div>
                     );
                   }
-                  
+
                   return upcomingAppointments.map((appointment: any) => (
                     <div key={appointment.id} className="border-l-4 border-[#007bff] pl-4 py-2 hover:bg-gray-50 transition-colors">
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <p className="font-medium text-[#333333]">
                             {/* Handle both formats: nested patient object or direct patient_name */}
-                            {appointment.patient 
+                            {appointment.patient
                               ? `${appointment.patient.first_name} ${appointment.patient.last_name}`
                               : appointment.patient_name || 'Unknown Patient'}
                           </p>
@@ -2369,17 +2257,16 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                               hour12: true
                             })}
                           </p>
-                          <span className={`inline-block px-2 py-0.5 text-xs rounded-full mt-1 ${
-                            appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
+                          <span className={`inline-block px-2 py-0.5 text-xs rounded-full mt-1 ${appointment.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
                             appointment.status === 'confirmed' ? 'bg-green-100 text-green-700' :
-                            appointment.status === 'completed' ? 'bg-gray-100 text-gray-700' :
-                            'bg-yellow-100 text-yellow-700'
-                          }`}>
+                              appointment.status === 'completed' ? 'bg-gray-100 text-gray-700' :
+                                'bg-yellow-100 text-yellow-700'
+                            }`}>
                             {appointment.status || 'pending'}
                           </span>
                         </div>
                       </div>
-                      
+
                       {/* Action buttons for appointments */}
                       {appointment.status !== 'completed' && (
                         <div className="flex gap-2 mt-2 pt-2 border-t border-gray-100">
@@ -2406,7 +2293,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                           </button>
                         </div>
                       )}
-                      
+
                       {appointment.status === 'completed' && (
                         <div className="mt-2 pt-2 border-t border-gray-100">
                           <span className="block text-xs text-gray-600 text-center">
@@ -2450,17 +2337,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                   <div className="rounded-lg p-4" style={{ backgroundColor: '#f0f4ff' }}>
                     <h3 className="text-sm font-medium text-[#999999]">Today</h3>
                     <div className="text-2xl font-bold" style={{ color: '#0056B3' }}>
-                      {['revenue', 'expenses'].includes(selectedCard) 
+                      {['revenue', 'expenses'].includes(selectedCard)
                         ? formatCurrency(cardBreakdown.today.count)
                         : cardBreakdown.today.count.toLocaleString()}
                     </div>
                     <p className="text-xs text-[#999999]">{cardBreakdown.today.data.length} records</p>
                   </div>
-                  
+
                   <div className="bg-green-50 rounded-lg p-4">
                     <h3 className="text-sm font-medium text-[#999999]">Last 7 Days</h3>
                     <div className="text-2xl font-bold text-green-600">
-                      {['revenue', 'expenses'].includes(selectedCard) 
+                      {['revenue', 'expenses'].includes(selectedCard)
                         ? formatCurrency(cardBreakdown.thisWeek.count)
                         : cardBreakdown.thisWeek.count.toLocaleString()}
                     </div>
@@ -2474,11 +2361,11 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                       })()}
                     </p>
                   </div>
-                  
+
                   <div className="bg-purple-50 rounded-lg p-4">
                     <h3 className="text-sm font-medium text-[#999999]">This Month</h3>
                     <div className="text-2xl font-bold text-purple-600">
-                      {['revenue', 'expenses'].includes(selectedCard) 
+                      {['revenue', 'expenses'].includes(selectedCard)
                         ? formatCurrency(cardBreakdown.thisMonth.count)
                         : cardBreakdown.thisMonth.count.toLocaleString()}
                     </div>
@@ -2514,7 +2401,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                           </div>
                         ))}
                       </div>
-                      
+
                       {/* Service breakdown chart visual */}
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h4 className="text-sm font-medium text-[#666666] mb-3">Service Distribution</h4>
@@ -2523,7 +2410,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                             <div key={index} className="flex items-center space-x-2">
                               <div className="text-xs text-[#666666] w-20 truncate">{service.service}</div>
                               <div className="flex-1 bg-gray-200 rounded-full h-2">
-                                <div 
+                                <div
                                   className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-300"
                                   style={{ width: `${service.percentage}%` }}
                                 ></div>

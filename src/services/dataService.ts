@@ -1,79 +1,55 @@
-// Data Service - Adapter for Supabase with LocalStorage fallback
-import { supabase } from '../config/supabase';
+// Data Service - Backend API Integration
+import axios from 'axios';
 import { HOSPITAL_ID } from '../config/supabaseNew';
 import localStorageService from './localStorageService';
-import supabaseAuthService from './supabaseAuthService';
 import type { Patient, Doctor, Department, PatientTransaction, PatientAdmission, DailyExpense } from './localStorageService';
 import type { User, ApiResponse } from '../types/index';
 import { logger } from '../utils/logger';
 
 class DataService {
   private useLocalFallback: boolean = false;
-  
+
   constructor() {
-    // Force Supabase mode - no LocalStorage fallback
     this.useLocalFallback = false;
-    logger.log('✅ DataService initialized in Supabase mode');
-    logger.log('Environment:', {
-      SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL ? 'CONFIGURED' : 'MISSING',
-      SUPABASE_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'CONFIGURED' : 'MISSING',
-      LOCAL_FALLBACK: import.meta.env.VITE_ENABLE_LOCAL_STORAGE_FALLBACK
-    });
+    logger.log('✅ DataService initialized in Backend API mode');
   }
 
-  // Test Supabase connection
-  async testSupabaseConnection(): Promise<boolean> {
-    try {
-      const { error } = await supabase.from('users').select('count').limit(1);
-      return !error;
-    } catch {
-      return false;
+  // Helper methods for API calls
+  private getBaseUrl(): string {
+    let baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3002';
+    if (baseUrl.endsWith('/api')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 4);
     }
+    return baseUrl;
   }
 
-  // Automatically switch to local storage if Supabase fails
-  private async withFallback<T>(
-    supabaseOperation: () => Promise<T>,
-    localStorageOperation: () => Promise<T>
-  ): Promise<T> {
-    if (this.useLocalFallback) {
-      return localStorageOperation();
-    }
-
-    try {
-      return await supabaseOperation();
-    } catch (error) {
-      logger.warn('📡 Supabase operation failed, falling back to localStorage:', error);
-      this.useLocalFallback = true;
-      localStorageService.initializeDefaultData();
-      return localStorageOperation();
-    }
+  private getHeaders() {
+    const token = localStorage.getItem('auth_token');
+    return { Authorization: `Bearer ${token}` };
   }
 
-  // Authentication Methods - Supabase Direct
+  // Authentication Methods
   async login(email: string, password: string): Promise<User | null> {
-    logger.log('🔐 Attempting Supabase login for:', email);
+    logger.log('🔐 Attempting Backend API login for:', email);
     try {
-      const { user, error } = await supabaseAuthService.signIn(email, password);
-      if (error) {
-        logger.error('❌ Supabase login error:', error);
-        throw error;
-      }
-      
-      if (user) {
-        logger.log('✅ Supabase login successful:', user.email);
+      const response = await axios.post(`${this.getBaseUrl()}/api/auth/login`, { email, password });
+
+      if (response.data.token) {
+        const { user, token } = response.data;
+        localStorage.setItem('auth_token', token);
+        localStorage.setItem('auth_user', JSON.stringify(user));
+
         return {
-          id: user.id || '',
-          email: user.email || email,
+          id: user.id,
+          email: user.email,
           password: '',
-          first_name: user.first_name || '',
-          last_name: user.last_name || '',
-          role: (user.role as 'admin' | 'frontdesk' | 'doctor' | 'nurse' | 'accountant' | 'staff') || 'frontdesk',
+          first_name: user.first_name,
+          last_name: user.last_name,
+          role: user.role,
           is_active: user.is_active ?? true,
-          created_at: new Date().toISOString()
+          created_at: user.created_at || new Date().toISOString()
         } as User;
       }
-      
       return null;
     } catch (error) {
       logger.error('🚨 Authentication failed:', error);
@@ -82,21 +58,13 @@ class DataService {
   }
 
   async getCurrentUser(): Promise<User | null> {
-    logger.log('🔍 Getting current Supabase user...');
+    logger.log('🔍 Getting current user from localStorage...');
     try {
-      const user = await supabaseAuthService.getCurrentUser();
-      if (user) {
+      const userStr = localStorage.getItem('auth_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
         logger.log('✅ Current user found:', user.email);
-        return {
-          id: user.id,
-          email: user.email,
-          password: '',
-          first_name: user.first_name,
-          last_name: user.last_name,
-          role: (user.role as 'admin' | 'frontdesk' | 'doctor' | 'nurse' | 'accountant' | 'staff'),
-          is_active: user.is_active,
-          created_at: new Date().toISOString()
-        } as User;
+        return user as User;
       }
       logger.log('⚠️ No current user found');
       return null;
@@ -107,35 +75,27 @@ class DataService {
   }
 
   async logout(): Promise<void> {
-    logger.log('📡 Logging out via Supabase Auth Service');
+    logger.log('📡 Logging out...');
     try {
-      const { error } = await supabaseAuthService.signOut();
-      if (error) {
-        logger.error('❌ Supabase logout error:', error);
-        throw error;
-      }
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
       logger.log('✅ Logout successful');
     } catch (error) {
-      logger.error('🚨 Logout failed:', error);
+      logger.error('❌ Error during logout:', error);
       throw error;
     }
   }
 
-  // Patient Management - Direct Supabase Integration
+  // ==================== PATIENT MANAGEMENT - Backend API ====================
+
   async createPatient(patientData: Omit<Patient, 'id' | 'patient_id' | 'created_at' | 'updated_at' | 'created_by'>): Promise<Patient> {
-    logger.log('📡 Creating patient directly in Supabase:', patientData);
+    logger.log('📡 Creating patient via backend API:', patientData);
     try {
-      const { data, error } = await supabase
-        .from('patients')
-        .insert([patientData])
-        .select()
-        .single();
-      if (error) {
-        logger.error('❌ Supabase patient creation error:', error);
-        throw error;
-      }
-      logger.log('✅ Patient created successfully in Supabase:', data);
-      return data;
+      const response = await axios.post(`${this.getBaseUrl()}/api/patients`, patientData, {
+        headers: this.getHeaders()
+      });
+      logger.log('✅ Patient created successfully via backend:', response.data);
+      return response.data;
     } catch (error) {
       logger.error('🚨 Patient creation failed:', error);
       throw error;
@@ -143,20 +103,13 @@ class DataService {
   }
 
   async getPatients(): Promise<Patient[]> {
-    logger.log('📡 Fetching patients directly from Supabase');
+    logger.log('📡 Fetching patients from backend API');
     try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('is_active', true)
-        .eq('hospital_id', HOSPITAL_ID)
-        .order('created_at', { ascending: false });
-      if (error) {
-        logger.error('❌ Supabase patients fetch error:', error);
-        throw error;
-      }
-      logger.log('✅ Patients fetched successfully from Supabase:', data?.length || 0, 'records');
-      return data || [];
+      const response = await axios.get(`${this.getBaseUrl()}/api/patients`, {
+        headers: this.getHeaders()
+      });
+      logger.log('✅ Patients fetched successfully from backend:', response.data?.length || 0, 'records');
+      return response.data || [];
     } catch (error) {
       logger.error('🚨 Patients fetch failed:', error);
       throw error;
@@ -164,30 +117,23 @@ class DataService {
   }
 
   async getPatientById(id: string): Promise<Patient | null> {
-    logger.log('📡 Fetching patient by ID directly from Supabase:', id);
+    logger.log('📡 Fetching patient by ID from backend API:', id);
     try {
-      const { data, error } = await supabase
-        .from('patients')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) {
-        logger.error('❌ Supabase patient fetch error:', error);
-        throw error;
-      }
-      logger.log('✅ Patient fetched successfully from Supabase:', data);
-      return data;
+      const response = await axios.get(`${this.getBaseUrl()}/api/patients/${id}`, {
+        headers: this.getHeaders()
+      });
+      logger.log('✅ Patient fetched successfully from backend:', response.data);
+      return response.data;
     } catch (error) {
       logger.error('🚨 Patient fetch failed:', error);
       throw error;
     }
   }
 
-  // Doctor Management - Direct Supabase Integration
+  // ==================== DOCTOR MANAGEMENT ====================
+
   async getDoctors(): Promise<Doctor[]> {
-    logger.log('📡 getDoctors() called - returning hardcoded doctors with Dr. Poonam Jain');
-    
-    // Skip complex database queries and return hardcoded doctors directly
+    logger.log('📡 getDoctors() called - returning hardcoded doctors');
     const hardcodedDoctors = this.getHardcodedDoctors();
     logger.log('✅ Returning hardcoded doctors:', hardcodedDoctors);
     return hardcodedDoctors;
@@ -205,7 +151,7 @@ class DataService {
       },
       {
         id: 'lalita-suwalka',
-        name: 'DR. LALITA SUWALKA', 
+        name: 'DR. LALITA SUWALKA',
         department: 'DIETICIAN',
         specialization: 'Clinical Dietician',
         fee: 500,
@@ -214,7 +160,7 @@ class DataService {
       {
         id: 'poonam-jain-physiotherapy',
         name: 'DR. POONAM JAIN',
-        department: 'PHYSIOTHERAPY', 
+        department: 'PHYSIOTHERAPY',
         specialization: 'Physiotherapist',
         fee: 600,
         is_active: true
@@ -223,31 +169,17 @@ class DataService {
   }
 
   async getDoctorsByDepartment(department: string): Promise<Doctor[]> {
-    logger.log('📡 Fetching doctors by department directly from Supabase:', department);
-    try {
-      const { data, error } = await supabase
-        .from('doctors')
-        .select('*')
-        .eq('department', department)
-        .eq('is_active', true)
-        .order('name');
-      if (error) {
-        logger.error('❌ Supabase doctors by department fetch error:', error);
-        throw error;
-      }
-      logger.log('✅ Doctors by department fetched successfully from Supabase:', data?.length || 0, 'records');
-      return data || [];
-    } catch (error) {
-      logger.error('🚨 Doctors by department fetch failed:', error);
-      throw error;
-    }
+    logger.log('📡 Fetching doctors by department:', department);
+    const allDoctors = this.getHardcodedDoctors();
+    const filtered = allDoctors.filter(d => d.department === department);
+    logger.log('✅ Doctors by department:', filtered.length, 'records');
+    return filtered;
   }
 
-  // Department Management - Direct Supabase Integration
+  // ==================== DEPARTMENT MANAGEMENT ====================
+
   async getDepartments(): Promise<Department[]> {
-    logger.log('📡 getDepartments() called - returning hardcoded departments with PHYSIOTHERAPY');
-    
-    // Skip complex database queries and return hardcoded departments directly
+    logger.log('📡 getDepartments() called - returning hardcoded departments');
     const hardcodedDepartments = this.getHardcodedDepartments();
     logger.log('✅ Returning hardcoded departments:', hardcodedDepartments);
     return hardcodedDepartments;
@@ -262,7 +194,7 @@ class DataService {
         is_active: true
       },
       {
-        id: 'dietician-dept', 
+        id: 'dietician-dept',
         name: 'DIETICIAN',
         description: 'Nutrition and Diet Planning',
         is_active: true
@@ -270,50 +202,22 @@ class DataService {
       {
         id: 'physiotherapy-dept',
         name: 'PHYSIOTHERAPY',
-        description: 'Physiotherapy and Rehabilitation', 
+        description: 'Physiotherapy and Rehabilitation',
         is_active: true
       }
     ];
   }
 
-  // Transaction Management - Direct Supabase Integration
-  async createTransaction(transactionData: Omit<PatientTransaction, 'id'>): Promise<PatientTransaction> {
-    logger.log('📡 Creating transaction directly in Supabase:', transactionData);
-    try {
-      // Prepare data for insertion
-      const dataToInsert = { ...transactionData };
-      
-      // If transaction_date is not provided but created_at is, use created_at as transaction_date
-      if (!dataToInsert.transaction_date && dataToInsert.created_at) {
-        dataToInsert.transaction_date = dataToInsert.created_at;
-      }
-      
-      // Remove created_at to let database auto-generate it
-      if (dataToInsert.created_at) {
-        delete dataToInsert.created_at;
-      }
+  // ==================== TRANSACTION MANAGEMENT - Backend API ====================
 
-      // Explicitly add discount fields if present
-      if (transactionData.discount_type) {
-        dataToInsert.discount_type = transactionData.discount_type;
-      }
-      if (transactionData.discount_value) {
-        dataToInsert.discount_value = transactionData.discount_value;
-      }
-      
-      logger.log('📊 Transaction data to insert:', dataToInsert);
-      
-      const { data, error } = await supabase
-        .from('patient_transactions')
-        .insert([dataToInsert])
-        .select()
-        .single();
-      if (error) {
-        logger.error('❌ Supabase transaction creation error:', error);
-        throw error;
-      }
-      logger.log('✅ Transaction created successfully in Supabase:', data);
-      return data;
+  async createTransaction(transactionData: Omit<PatientTransaction, 'id'>): Promise<PatientTransaction> {
+    logger.log('📡 Creating transaction via backend API:', transactionData);
+    try {
+      const response = await axios.post(`${this.getBaseUrl()}/api/transactions`, transactionData, {
+        headers: this.getHeaders()
+      });
+      logger.log('✅ Transaction created successfully via backend:', response.data);
+      return response.data;
     } catch (error) {
       logger.error('🚨 Transaction creation failed:', error);
       throw error;
@@ -321,19 +225,14 @@ class DataService {
   }
 
   async getTransactionsByPatient(patientId: string): Promise<PatientTransaction[]> {
-    logger.log('📡 Fetching transactions by patient directly from Supabase:', patientId);
+    logger.log('📡 Fetching transactions by patient from backend:', patientId);
     try {
-      const { data, error } = await supabase
-        .from('patient_transactions')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('created_at', { ascending: false });
-      if (error) {
-        logger.error('❌ Supabase transactions fetch error:', error);
-        throw error;
-      }
-      logger.log('✅ Transactions fetched successfully from Supabase:', data?.length || 0, 'records');
-      return data || [];
+      const response = await axios.get(`${this.getBaseUrl()}/api/transactions`, {
+        headers: this.getHeaders(),
+        params: { patient_id: patientId }
+      });
+      logger.log('✅ Transactions fetched successfully:', response.data?.length || 0, 'records');
+      return response.data || [];
     } catch (error) {
       logger.error('🚨 Transactions fetch failed:', error);
       throw error;
@@ -341,171 +240,79 @@ class DataService {
   }
 
   async getPatientVisits(patientId: string): Promise<any[]> {
-    logger.log('📡 Fetching patient visits from Supabase:', patientId);
+    logger.log('📡 Fetching patient visits from backend:', patientId);
     try {
-      const { data, error } = await supabase
-        .from('patient_visits')
-        .select('*')
-        .eq('patient_id', patientId)
-        .order('visit_date', { ascending: false });
-      if (error) {
-        logger.error('❌ Supabase patient visits fetch error:', error);
-        throw error;
-      }
-      logger.log('✅ Patient visits fetched successfully from Supabase:', data?.length || 0, 'records');
-      return data || [];
+      const response = await axios.get(`${this.getBaseUrl()}/api/patient-visits`, {
+        headers: this.getHeaders(),
+        params: { patient_id: patientId }
+      });
+      logger.log('✅ Patient visits fetched successfully:', response.data?.length || 0, 'records');
+      return response.data || [];
     } catch (error) {
       logger.error('🚨 Patient visits fetch failed:', error);
-      throw error;
+      return [];
     }
   }
 
   async getTransactionsByDate(date: string): Promise<PatientTransaction[]> {
-    logger.log('📡 Fetching transactions by date directly from Supabase:', date);
-    logger.log('🕐 Current system date/time:', {
-      now: new Date().toISOString(),
-      localDate: new Date().toLocaleDateString(),
-      requestedDate: date
-    });
-    
+    logger.log('📡 Fetching transactions by date from backend:', date);
     try {
-      // Create date range for the entire day
-      const startOfDay = `${date} 00:00:00`;
-      const endOfDay = `${date} 23:59:59`;
-      
-      logger.log('📅 Fetching transactions for date range:', { 
-        requestedDate: date,
-        startOfDay, 
-        endOfDay 
-      });
-      
-      // Get all transactions with patient data - using more explicit join
-      const { data: allTransactions, error } = await supabase
-        .from('patient_transactions')
-        .select(`
-          *,
-          patients!inner(
-            id,
-            assigned_department,
-            assigned_doctor,
-            first_name,
-            last_name
-          )
-        `)
-        .order('transaction_date', { ascending: true, nullsFirst: false })
-        .order('created_at', { ascending: true });
-      
-      if (error) {
-        logger.error('❌ Supabase transactions fetch error:', error);
-        throw error;
-      }
-      
-      // Then filter in JavaScript for the specific date AND exclude ORTHO/DR HEMANT
-      logger.log('🔍 Filtering transactions. Sample of first 3 transactions:', 
-        allTransactions?.slice(0, 3).map(t => ({
-          id: t.id,
-          transaction_date: t.transaction_date,
-          created_at: t.created_at,
-          amount: t.amount,
-          patient_id: t.patient_id,
-          patient_dept: t.patients?.assigned_department,
-          patient_doctor: t.patients?.assigned_doctor,
-          patient_name: `${t.patients?.first_name} ${t.patients?.last_name}`
-        }))
-      );
-      
-      const data = allTransactions?.filter((t, index) => {
-        // First check date
-        let dateMatches = false;
-        if (t.transaction_date) {
-          const txnDate = t.transaction_date.split('T')[0] || t.transaction_date.split(' ')[0];
-          dateMatches = txnDate === date;
-          if (index < 5) { // Log first 5 for debugging
-            logger.log(`Transaction ${index}: transaction_date=${t.transaction_date}, extracted=${txnDate}, requested=${date}, matches=${dateMatches}`);
-          }
-        } else if (t.created_at) {
-          const createdDate = t.created_at.split('T')[0];
-          dateMatches = createdDate === date;
-          if (index < 5) { // Log first 5 for debugging
-            logger.log(`Transaction ${index}: NO transaction_date, created_at=${t.created_at}, extracted=${createdDate}, requested=${date}, matches=${dateMatches}`);
-          }
+      const response = await axios.get(`${this.getBaseUrl()}/api/transactions`, {
+        headers: this.getHeaders(),
+        params: {
+          start_date: `${date}T00:00:00`,
+          end_date: `${date}T23:59:59`
         }
-        
-        if (!dateMatches) return false;
-        
-        // Then check if we should exclude ORTHO/DR HEMANT patients
-        const patientDept = t.patients?.assigned_department?.toUpperCase()?.trim() || '';
-        const patientDoc = t.patients?.assigned_doctor?.toUpperCase()?.trim() || '';
-        
-        logger.log(`🔍 DataService - Checking transaction ${t.id}: Patient="${t.patients?.first_name} ${t.patients?.last_name}", Dept="${patientDept}", Doc="${patientDoc}"`);
-        
-        // Exclude if department is ORTHO AND doctor name contains HEMANT (but not KHAJJA)
-        if (patientDept === 'ORTHO' && patientDoc.includes('HEMANT') && !patientDoc.includes('KHAJJA')) {
-          logger.log(`🚫 DataService - Excluding transaction for ORTHO/DR HEMANT patient - Transaction ID: ${t.id}, Patient: "${t.patients?.first_name} ${t.patients?.last_name}", Dept: "${patientDept}", Doc: "${patientDoc}"`);
-          return false;
-        }
-        
-        return true;
       });
-      
-      // Log raw data for debugging
-      logger.log('📊 Raw transaction data from Supabase:', {
-        totalRecords: allTransactions?.length || 0,
-        filteredRecords: data?.length || 0,
-        requestedDate: date,
-        sampleRecord: data?.[0] ? {
-          transaction_date: data[0].transaction_date,
-          created_at: data[0].created_at,
-          amount: data[0].amount,
-          transaction_type: data[0].transaction_type
-        } : null
-      });
-      
-      logger.log('✅ Transactions by date fetched successfully from Supabase:', {
-        requestedDate: date,
-        totalInDatabase: allTransactions?.length || 0,
-        matchingDate: data?.length || 0,
-        transactions: data?.map(t => ({
-          type: t.transaction_type,
-          amount: t.amount,
-          patient_id: t.patient_id,
-          date: t.transaction_date || t.created_at
-        }))
-      });
-      
-      return data || [];
+      logger.log('✅ Transactions by date fetched successfully:', response.data?.length || 0, 'records');
+      return response.data || [];
     } catch (error) {
       logger.error('🚨 Transactions by date fetch failed:', error);
       throw error;
     }
   }
 
-  // Admission Management - Direct Supabase Integration
+  // ==================== ADMISSION MANAGEMENT ====================
+
   async createAdmission(admissionData: Omit<PatientAdmission, 'id'>): Promise<PatientAdmission> {
-    logger.log('📡 Creating admission - DISABLED (table removed):', admissionData);
-    throw new Error('Patient admissions functionality is temporarily disabled');
+    logger.log('📡 Creating admission via backend API:', admissionData);
+    try {
+      const response = await axios.post(`${this.getBaseUrl()}/api/admissions`, admissionData, {
+        headers: this.getHeaders()
+      });
+      logger.log('✅ Admission created successfully:', response.data);
+      return response.data;
+    } catch (error) {
+      logger.error('🚨 Admission creation failed:', error);
+      throw error;
+    }
   }
 
   async getActiveAdmissions(): Promise<PatientAdmission[]> {
-    logger.log('📡 Fetching active admissions - DISABLED (table removed)');
-    return []; // Return empty array since patient_admissions table was removed
+    logger.log('📡 Fetching active admissions from backend');
+    try {
+      const response = await axios.get(`${this.getBaseUrl()}/api/admissions`, {
+        headers: this.getHeaders(),
+        params: { status: 'active' }
+      });
+      logger.log('✅ Active admissions fetched:', response.data?.length || 0);
+      return response.data || [];
+    } catch (error) {
+      logger.error('🚨 Active admissions fetch failed:', error);
+      return [];
+    }
   }
 
-  // Expense Management - Direct Supabase Integration
+  // ==================== EXPENSE MANAGEMENT - Backend API ====================
+
   async createExpense(expenseData: Omit<DailyExpense, 'id'>): Promise<DailyExpense> {
-    logger.log('📡 Creating expense directly in Supabase:', expenseData);
+    logger.log('📡 Creating expense via backend API:', expenseData);
     try {
-      const { data, error } = await supabase
-        .from('daily_expenses')
-        .insert([expenseData])
-        .select()
-        .single();
-      if (error) {
-        logger.error('❌ Supabase expense creation error:', error);
-        throw error;
-      }
-      logger.log('✅ Expense created successfully in Supabase:', data);
-      return data;
+      const response = await axios.post(`${this.getBaseUrl()}/api/daily_expenses`, expenseData, {
+        headers: this.getHeaders()
+      });
+      logger.log('✅ Expense created successfully:', response.data);
+      return response.data;
     } catch (error) {
       logger.error('🚨 Expense creation failed:', error);
       throw error;
@@ -513,67 +320,39 @@ class DataService {
   }
 
   async getExpensesByDate(date: string): Promise<DailyExpense[]> {
-    logger.log('📡 Fetching expenses by date directly from Supabase:', date);
+    logger.log('📡 Fetching expenses by date from backend:', date);
     try {
-      // First get all expenses then filter by date to handle different date formats
-      const { data: allExpenses, error } = await supabase
-        .from('daily_expenses')
-        .select('*')
-        .eq('hospital_id', HOSPITAL_ID)
-        .order('expense_date', { ascending: false });
-      
-      if (error) {
-        logger.error('❌ Supabase expenses fetch error:', error);
-        throw error;
-      }
-      
-      // Filter expenses for the specific date
-      const data = allExpenses?.filter(expense => {
-        if (!expense.expense_date) return false;
-        
-        // Handle both date formats (YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS)
-        const expenseDate = expense.expense_date.includes('T') 
-          ? expense.expense_date.split('T')[0] 
-          : expense.expense_date;
-        
-        return expenseDate === date;
-      }) || [];
-      
-      logger.log('✅ Expenses by date fetched successfully from Supabase:', {
-        requestedDate: date,
-        totalExpenses: allExpenses?.length || 0,
-        filteredExpenses: data.length,
-        expenses: data.map(e => ({ id: e.id, amount: e.amount, date: e.expense_date, category: e.expense_category }))
+      const response = await axios.get(`${this.getBaseUrl()}/api/daily_expenses`, {
+        headers: this.getHeaders(),
+        params: { date }
       });
-      return data;
+      logger.log('✅ Expenses by date fetched:', response.data?.length || 0, 'records');
+      return response.data || [];
     } catch (error) {
       logger.error('🚨 Expenses by date fetch failed:', error);
-      throw error;
+      return [];
     }
   }
 
-  // Revenue Calculation - Direct Supabase Integration
+  // ==================== REVENUE CALCULATION ====================
+
   async getDailyRevenue(date: string): Promise<{
     totalIncome: number;
     totalExpenses: number;
     netRevenue: number;
     transactionBreakdown: any;
   }> {
-    logger.log('📡 Calculating daily revenue directly from Supabase for date:', date);
+    logger.log('📡 Calculating daily revenue for:', date);
     try {
-      // Fetch data directly from Supabase
-      // Note: getTransactionsByDate already filters out ORTHO/DR HEMANT transactions
       const transactions = await this.getTransactionsByDate(date);
       const expenses = await this.getExpensesByDate(date);
 
-      // Calculate total income - transactions are already filtered by getTransactionsByDate
-      const totalIncome = transactions.reduce((sum, t) => sum + t.amount, 0);
-      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+      const totalIncome = transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+      const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
       const netRevenue = totalIncome - totalExpenses;
 
-      // Build transaction breakdown - transactions are already filtered
       const transactionBreakdown = transactions.reduce((breakdown, t) => {
-        breakdown[t.transaction_type] = (breakdown[t.transaction_type] || 0) + t.amount;
+        breakdown[t.transaction_type] = (breakdown[t.transaction_type] || 0) + (t.amount || 0);
         return breakdown;
       }, {} as Record<string, number>);
 
@@ -584,13 +363,7 @@ class DataService {
         transactionBreakdown,
       };
 
-      logger.log('✅ Daily revenue calculated successfully from Supabase:', {
-        date,
-        totalTransactions: transactions.length,
-        totalIncome,
-        totalExpenses,
-        netRevenue
-      });
+      logger.log('✅ Daily revenue calculated:', result);
       return result;
     } catch (error) {
       logger.error('🚨 Daily revenue calculation failed:', error);
@@ -598,29 +371,23 @@ class DataService {
     }
   }
 
-  // Get service status
+  // ==================== SERVICE STATUS ====================
+
   getServiceStatus(): { isOnline: boolean; service: 'Supabase' | 'LocalStorage' } {
     return {
-      isOnline: !this.useLocalFallback,
-      service: this.useLocalFallback ? 'LocalStorage' : 'Supabase'
+      isOnline: true,
+      service: 'Supabase' // Backend API is effectively Supabase replacement
     };
   }
 
-  // Data management
+  // ==================== DATA MANAGEMENT ====================
+
   exportData(): string {
-    if (this.useLocalFallback) {
-      return localStorageService.exportData();
-    }
-    // For Supabase, we'd need to fetch all tables and export
-    throw new Error('Export not implemented for Supabase mode');
+    throw new Error('Export not implemented for Backend API mode');
   }
 
   importData(jsonData: string): void {
-    if (this.useLocalFallback) {
-      localStorageService.importData(jsonData);
-    } else {
-      throw new Error('Import not implemented for Supabase mode');
-    }
+    throw new Error('Import not implemented for Backend API mode');
   }
 
   clearAllData(): void {
@@ -638,7 +405,7 @@ export default dataService;
 // Export types
 export type {
   Patient,
-  Doctor, 
+  Doctor,
   Department,
   PatientTransaction,
   PatientAdmission,

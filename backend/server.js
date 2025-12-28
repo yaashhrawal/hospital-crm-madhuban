@@ -11,7 +11,9 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Increase body size limit to 50MB to support base64 image uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Serve static files from the dist directory
 app.use(express.static(path.join(__dirname, '../dist')));
@@ -162,13 +164,30 @@ app.post('/api/auth/register', authenticateToken, async (req, res) => {
 // Get all patients
 app.get('/api/patients', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM patients WHERE (is_active = true OR is_active IS NULL) ORDER BY created_at DESC'
-    );
+    // Fetch patients with transactions and admissions using subqueries
+    const result = await pool.query(`
+      SELECT
+        p.*,
+        COALESCE(
+          (SELECT json_agg(row_to_json(pt.*))
+           FROM patient_transactions pt
+           WHERE pt.patient_id = p.id),
+          '[]'::json
+        ) as transactions,
+        COALESCE(
+          (SELECT json_agg(row_to_json(pa.*))
+           FROM patient_admissions pa
+           WHERE pa.patient_id = p.id),
+          '[]'::json
+        ) as admissions
+      FROM patients p
+      WHERE (p.is_active = true OR p.is_active IS NULL)
+      ORDER BY p.created_at DESC
+    `);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching patients:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
@@ -181,18 +200,31 @@ app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Start date and end date are required' });
     }
 
-    const result = await pool.query(
-      `SELECT * FROM patients 
-       WHERE date_of_entry >= $1 AND date_of_entry <= $2 
-       AND (is_active = true OR is_active IS NULL)
-       ORDER BY date_of_entry DESC`,
-      [start_date + ' 00:00:00', end_date + ' 23:59:59']
-    );
+    const result = await pool.query(`
+      SELECT
+        p.*,
+        COALESCE(
+          (SELECT json_agg(row_to_json(pt.*))
+           FROM patient_transactions pt
+           WHERE pt.patient_id = p.id),
+          '[]'::json
+        ) as transactions,
+        COALESCE(
+          (SELECT json_agg(row_to_json(pa.*))
+           FROM patient_admissions pa
+           WHERE pa.patient_id = p.id),
+          '[]'::json
+        ) as admissions
+      FROM patients p
+      WHERE p.date_of_entry >= $1 AND p.date_of_entry <= $2
+        AND (p.is_active = true OR p.is_active IS NULL)
+      ORDER BY p.date_of_entry DESC
+    `, [start_date, end_date]);
 
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching patients by date range:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
@@ -202,10 +234,26 @@ app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
     const { date } = req.params;
     const { limit } = req.query;
 
-    let query = `SELECT * FROM patients 
-                 WHERE date_of_entry::date = $1 
-                 AND (is_active = true OR is_active IS NULL)
-                 ORDER BY date_of_entry DESC`;
+    let query = `
+      SELECT
+        p.*,
+        COALESCE(
+          (SELECT json_agg(row_to_json(pt.*))
+           FROM patient_transactions pt
+           WHERE pt.patient_id = p.id),
+          '[]'::json
+        ) as transactions,
+        COALESCE(
+          (SELECT json_agg(row_to_json(pa.*))
+           FROM patient_admissions pa
+           WHERE pa.patient_id = p.id),
+          '[]'::json
+        ) as admissions
+      FROM patients p
+      WHERE p.date_of_entry::date = $1
+        AND (p.is_active = true OR p.is_active IS NULL)
+      ORDER BY p.date_of_entry DESC
+    `;
 
     const params = [date];
 
@@ -218,7 +266,7 @@ app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching patients by date:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
@@ -246,7 +294,6 @@ app.get('/api/patients/:id', authenticateToken, async (req, res) => {
 app.post('/api/patients', authenticateToken, async (req, res) => {
   try {
     const {
-      patient_id,
       first_name,
       last_name,
       age,
@@ -261,27 +308,90 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
       current_medications,
       blood_group,
       notes,
-      date_of_entry
+      date_of_entry,
+      photo_url,
+      patient_tag,
+      prefix,
+      date_of_birth,
+      assigned_doctor,
+      assigned_department,
+      has_reference,
+      reference_details,
+      abha_id
     } = req.body;
+
+    // Auto-generate patient_id in format M000001, M000002, etc.
+    let generatedPatientId;
+
+    // Get the last patient_id from the database
+    const lastPatientResult = await pool.query(
+      `SELECT patient_id FROM patients
+       WHERE patient_id LIKE 'M%'
+       ORDER BY patient_id DESC
+       LIMIT 1`
+    );
+
+    if (lastPatientResult.rows.length > 0 && lastPatientResult.rows[0].patient_id) {
+      // Extract the numeric part from the last patient_id (e.g., M000010 -> 10)
+      const lastId = lastPatientResult.rows[0].patient_id;
+      const numericPart = parseInt(lastId.substring(1)) || 0;
+      const nextNumber = numericPart + 1;
+
+      // Format as M + 6-digit zero-padded number
+      generatedPatientId = 'M' + nextNumber.toString().padStart(6, '0');
+      console.log(`📝 Last patient ID: ${lastId}, Generated new ID: ${generatedPatientId}`);
+    } else {
+      // No patients yet, start with M000001
+      generatedPatientId = 'M000001';
+      console.log(`📝 First patient, Generated ID: ${generatedPatientId}`);
+    }
+
+    // Auto-generate queue number (resets daily)
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+
+    // Get the last queue number for today
+    const lastQueueResult = await pool.query(
+      `SELECT queue_no FROM patients
+       WHERE queue_date = $1
+       ORDER BY queue_no DESC
+       LIMIT 1`,
+      [today]
+    );
+
+    let queueNumber;
+    if (lastQueueResult.rows.length > 0 && lastQueueResult.rows[0].queue_no) {
+      queueNumber = lastQueueResult.rows[0].queue_no + 1;
+      console.log(`🎫 Last queue number for today: ${lastQueueResult.rows[0].queue_no}, Generated new queue: ${queueNumber}`);
+    } else {
+      queueNumber = 1;
+      console.log(`🎫 First patient for today, Generated queue: ${queueNumber}`);
+    }
 
     const result = await pool.query(
       `INSERT INTO patients (
-        patient_id, first_name, last_name, age, gender, phone, email, address,
+        id, patient_id, prefix, first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
-        allergies, current_medications, blood_group, notes, date_of_entry, created_by, is_active
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
+        photo_url, patient_tag, abha_id, assigned_doctor, assigned_department,
+        has_reference, reference_details, created_by, is_active,
+        queue_no, queue_status, queue_date
+      ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
       RETURNING *`,
       [
-        patient_id, first_name, last_name, age, gender, phone, email, address,
+        generatedPatientId, prefix || 'Mr', first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
-        allergies, current_medications, blood_group, notes, date_of_entry, req.user.id, true
+        allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
+        photo_url, patient_tag, abha_id, assigned_doctor, assigned_department,
+        has_reference, reference_details, req.user.id, true,
+        queueNumber, 'waiting', today
       ]
     );
 
+    console.log(`✅ Patient created with ID: ${generatedPatientId}`);
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error creating patient:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
@@ -314,53 +424,107 @@ app.put('/api/patients/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get patients by date range
-app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
+// Delete patient
+app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
   try {
-    const { start_date, end_date } = req.query;
+    const { id } = req.params;
+    console.log('🗑️ Deleting patient with ID:', id);
 
-    if (!start_date || !end_date) {
-      return res.status(400).json({ error: 'Start date and end date are required' });
+    // First, delete related records to avoid foreign key constraints
+    // Delete patient transactions
+    await pool.query('DELETE FROM patient_transactions WHERE patient_id = $1', [id]);
+    console.log('✅ Deleted patient transactions');
+
+    // Delete patient admissions
+    await pool.query('DELETE FROM patient_admissions WHERE patient_id = $1', [id]);
+    console.log('✅ Deleted patient admissions');
+
+    // Delete patient refunds
+    await pool.query('DELETE FROM patient_refunds WHERE patient_id = $1', [id]);
+    console.log('✅ Deleted patient refunds');
+
+    // Delete complete patient record related data if exists
+    try {
+      await pool.query('DELETE FROM patient_high_risk WHERE patient_id = $1', [id]);
+      await pool.query('DELETE FROM patient_chief_complaints WHERE patient_id = $1', [id]);
+      await pool.query('DELETE FROM patient_examination WHERE patient_id = $1', [id]);
+      await pool.query('DELETE FROM patient_investigation WHERE patient_id = $1', [id]);
+      await pool.query('DELETE FROM patient_diagnosis WHERE patient_id = $1', [id]);
+      await pool.query('DELETE FROM patient_enhanced_prescription WHERE patient_id = $1', [id]);
+      await pool.query('DELETE FROM patient_record_summary WHERE patient_id = $1', [id]);
+      console.log('✅ Deleted patient record data');
+    } catch (err) {
+      // Tables might not exist, continue
+      console.log('⚠️ Some patient record tables not found, continuing...');
     }
 
-    const result = await pool.query(
-      `SELECT * FROM patients 
-       WHERE date_of_entry >= $1 AND date_of_entry <= $2 
-       AND is_active = true 
-       ORDER BY date_of_entry DESC`,
-      [start_date + ' 00:00:00', end_date + ' 23:59:59']
-    );
+    // Finally, delete the patient
+    const result = await pool.query('DELETE FROM patients WHERE id = $1 RETURNING id', [id]);
 
-    res.json(result.rows);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    console.log('✅ Patient deleted successfully');
+    res.json({ message: 'Patient deleted successfully', id: result.rows[0].id });
   } catch (error) {
-    console.error('Error fetching patients by date range:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('❌ Error deleting patient:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 
-// Get patients by exact date
-app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
+// Queue Management Endpoints
+
+// Get today's queue
+app.get('/api/queue/today', authenticateToken, async (req, res) => {
   try {
-    const { date } = req.params;
-    const { limit } = req.query;
+    const today = new Date().toISOString().split('T')[0];
 
-    let query = `SELECT * FROM patients 
-                 WHERE date_of_entry::date = $1 
-                 AND is_active = true 
-                 ORDER BY date_of_entry DESC`;
+    const result = await pool.query(
+      `SELECT
+        id, patient_id, first_name, last_name, age, gender, phone,
+        queue_no, queue_status, queue_date, created_at
+      FROM patients
+      WHERE queue_date = $1
+      ORDER BY queue_no ASC`,
+      [today]
+    );
 
-    const params = [date];
-
-    if (limit) {
-      query += ` LIMIT $2`;
-      params.push(limit);
-    }
-
-    const result = await pool.query(query, params);
+    console.log(`📋 Retrieved ${result.rows.length} patients in today's queue`);
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching patients by date:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error fetching queue:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Update queue status
+app.put('/api/queue/:id/status', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { queue_status } = req.body;
+
+    if (!['waiting', 'called', 'completed'].includes(queue_status)) {
+      return res.status(400).json({ error: 'Invalid queue status' });
+    }
+
+    const result = await pool.query(
+      `UPDATE patients
+       SET queue_status = $1
+       WHERE id = $2
+       RETURNING id, patient_id, first_name, last_name, queue_no, queue_status`,
+      [queue_status, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    console.log(`🎫 Updated queue status for patient ${result.rows[0].patient_id} to ${queue_status}`);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating queue status:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 

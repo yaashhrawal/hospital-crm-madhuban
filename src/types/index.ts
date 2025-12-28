@@ -17,6 +17,9 @@ export interface Patient {
   gender: Gender;
   bloodGroup?: string;
   patient_tag?: string;
+  photo_url?: string | null;
+  queue_no?: number | null;
+  queue_status?: 'waiting' | 'called' | 'completed' | null;
   emergencyContact?: {
     name: string;
     phone: string;

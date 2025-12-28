@@ -2499,9 +2499,18 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                   {/* Patient Header */}
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                        {patient.first_name.charAt(0)}{patient.last_name ? patient.last_name.charAt(0) : ''}
-                      </div>
+                      {patient.photo_url ? (
+                        <img
+                          src={patient.photo_url}
+                          alt={`${patient.first_name} ${patient.last_name}`}
+                          className="w-12 h-12 rounded-full object-cover"
+                          style={{ border: '2px solid #0056B3' }}
+                        />
+                      ) : (
+                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                          {patient.first_name.charAt(0)}{patient.last_name ? patient.last_name.charAt(0) : ''}
+                        </div>
+                      )}
                       <div>
                         <h3 className="text-lg font-semibold" style={{ color: '#0056B3' }}>
                           {patient.first_name} {patient.last_name}

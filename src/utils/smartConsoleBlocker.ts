@@ -114,11 +114,11 @@ export const setUserStatus = (isAdmin: boolean, userEmail: string) => {
     clearConsoleForNonAdmin();
 
     // Set up periodic console clearing for non-admin users
-    const clearInterval = setInterval(() => {
+    const clearConsoleInterval = setInterval(() => {
       if (!currentUserIsAdmin) {
         clearConsoleForNonAdmin();
       } else {
-        clearInterval(clearInterval);
+        clearInterval(clearConsoleInterval);
       }
     }, 1500); // Clear every 1.5 seconds for non-admin users
   }

@@ -17,7 +17,6 @@ import {
 } from 'lucide-react';
 import { logger } from '../utils/logger';
 import { parseLocalDate } from '../utils';
-import { PatientPhotoUpload } from './forms/PatientPhotoUpload';
 
 // Doctors and Departments data
 const DOCTORS_DATA = [
@@ -98,8 +97,6 @@ const NewFlexiblePatientEntry: React.FC = () => {
     allergies: '',
     current_medications: '',
     patient_tag: '',
-    photo_url: null as string | null,
-    abha_id: '',
     has_reference: 'NO',
     reference_details: '',
     // Doctor and Department (single selection for backward compatibility)
@@ -149,8 +146,6 @@ const NewFlexiblePatientEntry: React.FC = () => {
   const [selectedExistingPatient, setSelectedExistingPatient] = useState<any>(null);
   const [isNewVisit, setIsNewVisit] = useState(false);
   const [patientsLastLoaded, setPatientsLastLoaded] = useState<number>(0);
-  const [showQueueModal, setShowQueueModal] = useState(false);
-  const [registeredPatient, setRegisteredPatient] = useState<any>(null);
 
   // Check connection status on mount
   useEffect(() => {
@@ -530,16 +525,10 @@ const NewFlexiblePatientEntry: React.FC = () => {
         // Reference information
         has_reference: formData.has_reference === 'YES',
         reference_details: formData.has_reference === 'YES' ? formData.reference_details || undefined : undefined,
-
+        
         // Patient tag
         patient_tag: formData.patient_tag || undefined,
-
-        // Patient photo
-        photo_url: formData.photo_url || undefined,
-
-        // ABHA ID
-        abha_id: formData.abha_id || undefined,
-
+        
         // Notes - only include reference details
         notes: formData.has_reference === 'YES' && formData.reference_details ? `REF: ${formData.reference_details}` : undefined,
         
@@ -731,17 +720,14 @@ const NewFlexiblePatientEntry: React.FC = () => {
       if (saveAsDraft) {
         toast.success(`Patient draft saved! ${newPatient.first_name} ${newPatient.last_name}`);
       } else {
-        // Show queue number in toast if available
-        const queueMessage = newPatient.queue_no
-          ? `Queue No: ${newPatient.queue_no} | `
-          : '';
-        toast.success(`${queueMessage}Patient registered! ${newPatient.first_name} ${newPatient.last_name} - Total: ₹${totalAmount.toFixed(2)}`);
+        // Show UHID in success message if available
+        const successMessage = newPatient.uhid
+          ? `Patient registered! UHID: ${newPatient.uhid} | ${newPatient.first_name} ${newPatient.last_name} - Total: ₹${totalAmount.toFixed(2)}`
+          : `Patient registered successfully! ${newPatient.first_name} ${newPatient.last_name} - Total: ₹${totalAmount.toFixed(2)}`;
 
-        // Show queue modal for new registrations (not new visits)
-        if (!isNewVisit && newPatient.queue_no) {
-          setRegisteredPatient(newPatient);
-          setShowQueueModal(true);
-        }
+        toast.success(successMessage, {
+          duration: 6000, // Show for 6 seconds so user can see UHID
+        });
 
         // Send SMS if enabled
         if (formData.send_sms && formData.phone) {
@@ -1048,15 +1034,6 @@ const NewFlexiblePatientEntry: React.FC = () => {
                 <div className="flex items-center gap-2 mb-6">
                   <User className="w-5 h-5" style={{ color: '#0056B3' }} />
                   <h2 style={{ fontSize: '24px', color: '#0056B3', fontWeight: '600' }}>Patient Information</h2>
-                </div>
-
-                {/* Patient Photo Upload */}
-                <div className="mb-6">
-                  <PatientPhotoUpload
-                    value={formData.photo_url}
-                    onChange={(photoUrl) => setFormData({ ...formData, photo_url: photoUrl })}
-                    disabled={loading}
-                  />
                 </div>
 
                 {/* Name Fields */}
@@ -1392,34 +1369,6 @@ const NewFlexiblePatientEntry: React.FC = () => {
                       onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
                     />
                   </div>
-                </div>
-
-                {/* ABHA ID Field */}
-                <div className="mb-4">
-                  <label style={{ display: 'block', fontSize: '14px', color: '#333333', marginBottom: '6px', fontWeight: '500' }}>
-                    ABHA ID (Ayushman Bharat Health Account)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.abha_id}
-                    onChange={(e) => setFormData({ ...formData, abha_id: e.target.value })}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid #CCCCCC',
-                      fontSize: '16px',
-                      color: '#333333',
-                      outline: 'none'
-                    }}
-                    placeholder="Enter 14-digit ABHA ID (optional)"
-                    maxLength={14}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#0056B3'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
-                  />
-                  <span style={{ fontSize: '12px', color: '#666666', marginTop: '4px', display: 'block' }}>
-                    Example: 12-3456-7890-1234
-                  </span>
                 </div>
 
                 {/* Date Fields */}
@@ -2553,167 +2502,6 @@ const NewFlexiblePatientEntry: React.FC = () => {
           </div>
         </form>
       </div>
-
-      {/* Queue Number Modal */}
-      {showQueueModal && registeredPatient && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-          }}
-          onClick={() => setShowQueueModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
-              padding: '40px',
-              maxWidth: '500px',
-              width: '90%',
-              boxShadow: '0 10px 40px rgba(0, 0, 0, 0.3)',
-              textAlign: 'center',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              style={{
-                width: '80px',
-                height: '80px',
-                borderRadius: '50%',
-                backgroundColor: '#E8F5E9',
-                margin: '0 auto 24px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Check style={{ width: '48px', height: '48px', color: '#4CAF50' }} />
-            </div>
-
-            <h2
-              style={{
-                fontSize: '28px',
-                fontWeight: '700',
-                color: '#333333',
-                marginBottom: '8px',
-              }}
-            >
-              Patient Registered Successfully!
-            </h2>
-
-            <p
-              style={{
-                fontSize: '16px',
-                color: '#666666',
-                marginBottom: '32px',
-              }}
-            >
-              {registeredPatient.first_name} {registeredPatient.last_name}
-            </p>
-
-            <div
-              style={{
-                backgroundColor: '#F0F7FF',
-                borderRadius: '12px',
-                padding: '32px',
-                marginBottom: '24px',
-                border: '2px solid #0056B3',
-              }}
-            >
-              <p
-                style={{
-                  fontSize: '14px',
-                  color: '#666666',
-                  marginBottom: '8px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '1px',
-                  fontWeight: '600',
-                }}
-              >
-                Your Queue Number
-              </p>
-              <div
-                style={{
-                  fontSize: '72px',
-                  fontWeight: '900',
-                  color: '#0056B3',
-                  lineHeight: '1',
-                }}
-              >
-                {registeredPatient.queue_no}
-              </div>
-            </div>
-
-            <div
-              style={{
-                backgroundColor: '#F5F7FA',
-                borderRadius: '8px',
-                padding: '16px',
-                marginBottom: '24px',
-                textAlign: 'left',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ color: '#666666', fontSize: '14px' }}>Patient ID:</span>
-                <span style={{ color: '#333333', fontSize: '14px', fontWeight: '600' }}>
-                  {registeredPatient.patient_id}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#666666', fontSize: '14px' }}>Status:</span>
-                <span
-                  style={{
-                    color: '#4CAF50',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {registeredPatient.queue_status || 'Waiting'}
-                </span>
-              </div>
-            </div>
-
-            <p
-              style={{
-                fontSize: '14px',
-                color: '#666666',
-                marginBottom: '24px',
-              }}
-            >
-              Please keep this queue number for reference. You will be called when your turn arrives.
-            </p>
-
-            <button
-              onClick={() => setShowQueueModal(false)}
-              style={{
-                width: '100%',
-                padding: '14px 24px',
-                borderRadius: '8px',
-                backgroundColor: '#0056B3',
-                color: '#FFFFFF',
-                border: 'none',
-                fontWeight: '700',
-                cursor: 'pointer',
-                fontSize: '16px',
-                transition: 'background-color 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#004494')}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#0056B3')}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -6,6 +6,8 @@ export type TransactionType = 'entry_fee' | 'consultation' | 'service' | 'admiss
 
 export interface Patient {
   id: string;
+  uhid?: string; // UHID - Unique Hospital ID (NABH Compliance)
+  patient_id?: string; // Legacy patient ID
   firstName?: string;
   lastName?: string;
   first_name?: string;
@@ -16,10 +18,10 @@ export interface Patient {
   age: number;
   gender: Gender;
   bloodGroup?: string;
+  blood_group?: string;
   patient_tag?: string;
-  photo_url?: string | null;
-  queue_no?: number | null;
-  queue_status?: 'waiting' | 'called' | 'completed' | null;
+  date_of_entry?: string;
+  date_of_birth?: string;
   emergencyContact?: {
     name: string;
     phone: string;
@@ -28,6 +30,7 @@ export interface Patient {
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
   medicalHistory?: string[];
+  medical_history?: string;
   allergies?: string[];
   is_active?: boolean;
   createdAt?: Date;
@@ -35,6 +38,8 @@ export interface Patient {
   created_at?: string;
   updated_at?: string;
   created_by?: string;
+  totalSpent?: number;
+  visitCount?: number;
   [key: string]: any;
 }
 

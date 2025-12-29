@@ -17,7 +17,7 @@ import {
   ChevronRight,
   Check
 } from 'lucide-react';
-import { PatientPhotoUpload } from './PatientPhotoUpload';
+import { UHIDDisplay } from '../OPD/UHIDDisplay';
 
 // Validation schema - removed emergency contact fields
 const patientEntrySchema = z.object({
@@ -68,7 +68,6 @@ const PatientEntryForm: React.FC<PatientEntryFormProps> = ({ onPatientCreated, o
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [patientCreated, setPatientCreated] = useState<Patient | null>(null);
-  const [patientPhoto, setPatientPhoto] = useState<string | null>(null);
 
   const {
     register,
@@ -162,7 +161,6 @@ const PatientEntryForm: React.FC<PatientEntryFormProps> = ({ onPatientCreated, o
         blood_group: data.blood_group,
         patient_tag: data.patient_tag,
         notes: data.notes,
-        photo_url: patientPhoto,
         assigned_doctor: finalDoctorName,
         assigned_department: finalDepartmentName,
         is_active: true,
@@ -335,6 +333,18 @@ const PatientEntryForm: React.FC<PatientEntryFormProps> = ({ onPatientCreated, o
                 <p style={{ color: '#999999' }}>Patient has been successfully registered</p>
               </div>
 
+              {/* UHID Display - Prominent */}
+              {patientCreated.uhid && (
+                <div className="mb-6">
+                  <UHIDDisplay
+                    uhid={patientCreated.uhid}
+                    patientName={`${patientCreated.first_name} ${patientCreated.last_name}`}
+                    size="large"
+                    showCopy={true}
+                  />
+                </div>
+              )}
+
               <div style={{ backgroundColor: '#F5F7FA', borderRadius: '8px', padding: '24px', marginBottom: '32px', textAlign: 'left' }}>
                 <h3 className="font-semibold mb-4" style={{ color: '#333333', fontSize: '18px' }}>Patient Summary</h3>
                 <div className="space-y-2">
@@ -354,7 +364,6 @@ const PatientEntryForm: React.FC<PatientEntryFormProps> = ({ onPatientCreated, o
                   onClick={() => {
                     setCurrentStep(1);
                     setPatientCreated(null);
-                    setPatientPhoto(null);
                     reset();
                   }}
                   style={{
@@ -420,15 +429,6 @@ const PatientEntryForm: React.FC<PatientEntryFormProps> = ({ onPatientCreated, o
                 <div className="flex items-center gap-2 mb-6">
                   <User className="w-5 h-5" style={{ color: '#0056B3' }} />
                   <h2 style={{ fontSize: '24px', color: '#0056B3', fontWeight: '600' }}>Patient Information</h2>
-                </div>
-
-                {/* Patient Photo Upload */}
-                <div className="mb-6">
-                  <PatientPhotoUpload
-                    value={patientPhoto}
-                    onChange={setPatientPhoto}
-                    disabled={loading}
-                  />
                 </div>
 
                 {/* Name Fields */}

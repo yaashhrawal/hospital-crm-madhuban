@@ -739,7 +739,11 @@ export const Dashboard: React.FC = () => {
                   {dashboardStats.details.patients.recentPatients.slice(0, 6).map((patient: any) => (
                     <div key={patient.id} className="bg-[#F5F5F5] p-3 rounded-lg">
                       <p className="text-sm font-medium">{patient.first_name} {patient.last_name}</p>
-                      <p className="text-xs text-[#666666]">ID: {patient.patient_id}</p>
+                      {patient.uhid ? (
+                        <p className="text-xs font-mono font-semibold text-blue-600">UHID: {patient.uhid}</p>
+                      ) : (
+                        <p className="text-xs text-[#666666]">ID: {patient.patient_id || 'Not assigned'}</p>
+                      )}
                       <p className="text-xs text-[#666666]">Phone: {patient.phone}</p>
                       <p className="text-xs text-[#999999]">Registered: {new Date(patient.created_at).toLocaleDateString()}</p>
                     </div>
@@ -850,7 +854,13 @@ export const Dashboard: React.FC = () => {
                   {dashboardStats.details.patients.recentPatients?.slice(0, 3).map((patient: any) => (
                     <div key={patient.id} className="text-xs">
                       <p className="font-medium">{patient.first_name} {patient.last_name}</p>
-                      <p className="text-[#666666]">ID: {patient.patient_id} • {patient.phone}</p>
+                      <p className="text-[#666666]">
+                        {patient.uhid ? (
+                          <span className="font-mono font-semibold text-blue-600">UHID: {patient.uhid}</span>
+                        ) : (
+                          `ID: ${patient.patient_id || 'Not assigned'}`
+                        )} • {patient.phone}
+                      </p>
                     </div>
                   ))}
                 </div>

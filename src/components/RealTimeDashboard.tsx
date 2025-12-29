@@ -87,6 +87,11 @@ const RecentActivity: React.FC<RecentActivityProps> = ({ patients, appointments 
                   </div>
                   <div className="flex-1">
                     <div className="text-sm font-medium">{patient.first_name} {patient.last_name}</div>
+                    {patient.uhid && (
+                      <div className="text-xs font-mono font-semibold text-blue-600 mb-0.5">
+                        {patient.uhid}
+                      </div>
+                    )}
                     <div className="text-xs text-gray-500">
                       Registered {new Date(patient.created_at).toLocaleDateString()}
                     </div>

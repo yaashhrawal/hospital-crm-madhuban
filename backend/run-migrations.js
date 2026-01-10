@@ -28,7 +28,9 @@ async function runMigrations() {
     // Migration files in order
     const migrations = [
       '../docs/database/migration_scripts/001_add_uhid_system.sql',
-      '../docs/database/migration_scripts/002_module_access_control.sql'
+      '../docs/database/migration_scripts/002_module_access_control.sql',
+      '../database_migrations/create_opd_queues_and_vitals.sql',
+      '../database_migrations/add_queue_order_column.sql'
     ];
 
     for (const migrationFile of migrations) {

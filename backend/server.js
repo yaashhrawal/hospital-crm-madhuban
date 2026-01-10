@@ -1116,7 +1116,7 @@ app.post('/api/opd-queues/reorder', async (req, res) => {
     await client.query('ROLLBACK');
     console.error('Error reordering queue:', error);
     res.status(500).json({ error: error.message });
-  } sealed finally {
+  } finally {
     client.release();
   }
 });

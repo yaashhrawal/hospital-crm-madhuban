@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, User, CheckCircle, AlertCircle } from 'lucide-react';
+import { Clock, User, CheckCircle, AlertCircle, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 import HospitalService from '../services/hospitalService';
+import type { User as Doctor } from '../config/supabaseNew';
 
 interface QueuePatient {
   id: string;
@@ -12,6 +13,7 @@ interface QueuePatient {
   queue_status: 'waiting' | 'called' | 'completed';
   age?: number;
   gender?: string;
+  doctor_id?: string;
 }
 
 const QueueDisplayScreen: React.FC = () => {
@@ -20,10 +22,28 @@ const QueueDisplayScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch today's queue
+  // Doctor Filter State
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [selectedDoctor, setSelectedDoctor] = useState<string>('');
+
+  // Fetch doctors on mount
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const docs = await HospitalService.getDoctors();
+        setDoctors(docs);
+      } catch (err) {
+        console.error('Failed to load doctors', err);
+      }
+    };
+    fetchDoctors();
+  }, []);
+
+  // Fetch queue with polling
   const fetchQueue = async () => {
     try {
-      const data = await HospitalService.getOPDQueues();
+      // Pass selectedDoctor to filter if set. Pass undefined for status to fetch all active statuses (or backend default)
+      const data = await HospitalService.getOPDQueues(undefined, selectedDoctor || undefined);
 
       // Transform data to match component interface
       const transformedData: QueuePatient[] = data.map((item: any) => ({
@@ -36,7 +56,8 @@ const QueueDisplayScreen: React.FC = () => {
         queue_status: item.status === 'IN_CONSULTATION' ? 'called' :
           item.status === 'COMPLETED' ? 'completed' : 'waiting',
         age: item.age,
-        gender: item.gender
+        gender: item.gender,
+        doctor_id: item.doctor_id
       }));
 
       setQueuePatients(transformedData);
@@ -57,7 +78,7 @@ const QueueDisplayScreen: React.FC = () => {
       if (status === 'called') apiStatus = 'IN_CONSULTATION';
       if (status === 'completed') apiStatus = 'COMPLETED';
 
-      await HospitalService.updateQueueStatus(patientId, apiStatus);
+      await HospitalService.updateOPDQueueStatus(patientId, apiStatus);
 
       // Refresh the queue
       await fetchQueue();
@@ -77,12 +98,12 @@ const QueueDisplayScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch queue on mount and refresh every 10 seconds
+  // Poll for updates every 3 seconds (Simulated Real-time)
   useEffect(() => {
     fetchQueue();
-    const interval = setInterval(fetchQueue, 10000);
+    const interval = setInterval(fetchQueue, 3000);
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedDoctor]); // Re-fetch when filter changes
 
   // Get statistics
   const stats = {
@@ -96,7 +117,7 @@ const QueueDisplayScreen: React.FC = () => {
   const currentPatient = queuePatients.find(p => p.queue_status === 'called') ||
     queuePatients.find(p => p.queue_status === 'waiting');
 
-  if (loading) {
+  if (loading && queuePatients.length === 0) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -168,14 +189,41 @@ const QueueDisplayScreen: React.FC = () => {
               })}
             </p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Clock style={{ width: '32px', height: '32px', color: '#0056B3' }} />
-            <div style={{ fontSize: '32px', fontWeight: '700', color: '#0056B3' }}>
-              {currentTime.toLocaleTimeString('en-IN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-              })}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+            {/* Doctor Filter Dropdown */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F0F7FF', padding: '8px 16px', borderRadius: '8px' }}>
+              <Filter style={{ width: '20px', height: '20px', color: '#0056B3' }} />
+              <select
+                value={selectedDoctor}
+                onChange={(e) => setSelectedDoctor(e.target.value)}
+                style={{
+                  fontSize: '16px',
+                  padding: '8px',
+                  borderRadius: '4px',
+                  border: '1px solid #0056B3',
+                  color: '#0056B3',
+                  fontWeight: '600',
+                  minWidth: '200px',
+                  backgroundColor: 'transparent'
+                }}
+              >
+                <option value="">All Doctors</option>
+                {doctors.map(doc => (
+                  <option key={doc.id} value={doc.id}>Dr. {doc.first_name} {doc.last_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Clock style={{ width: '32px', height: '32px', color: '#0056B3' }} />
+              <div style={{ fontSize: '32px', fontWeight: '700', color: '#0056B3' }}>
+                {currentTime.toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -237,10 +285,10 @@ const QueueDisplayScreen: React.FC = () => {
             >
               {currentPatient.queue_no}
             </div>
-            <div style={{ fontSize: '32px', fontWeight: '600', color: '#333333', marginBottom: '8px' }}>
+            <div style={{ fontSize: '48px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
               {currentPatient.first_name} {currentPatient.last_name}
             </div>
-            <div style={{ fontSize: '20px', color: '#666666' }}>
+            <div style={{ fontSize: '24px', color: '#666666', marginTop: '16px' }}>
               Patient ID: {currentPatient.patient_id}
             </div>
           </div>
@@ -281,8 +329,8 @@ const QueueDisplayScreen: React.FC = () => {
                         '#FFFFFF',
                   borderRadius: '8px',
                   border: `2px solid ${patient.queue_status === 'completed' ? '#E0E0E0' :
-                      patient.queue_status === 'called' ? '#2196F3' :
-                        '#EEEEEE'
+                    patient.queue_status === 'called' ? '#2196F3' :
+                      '#EEEEEE'
                     }`,
                   opacity: patient.queue_status === 'completed' ? 0.6 : 1,
                 }}

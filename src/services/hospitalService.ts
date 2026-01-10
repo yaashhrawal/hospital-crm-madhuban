@@ -32,6 +32,46 @@ export class HospitalService {
     return import.meta.env.VITE_API_URL || 'http://localhost:3002';
   }
 
+  // Interceptor to handle auth errors globally
+  static {
+    axios.interceptors.response.use(
+      response => response,
+      error => {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          logger.error('🔐 Auth Error (401/403) detected in interceptor');
+          // Only clear if not already on login page to avoid loops
+          if (!window.location.pathname.includes('/login')) {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            // Optional: Redirect to login or let the UI handle the missing token
+            // window.location.href = '/login'; 
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  // Interceptor to handle auth errors globally
+  static {
+    axios.interceptors.response.use(
+      response => response,
+      error => {
+        if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+          logger.error('🔐 Auth Error (401/403) detected in interceptor');
+          // Only clear if not already on login page to avoid loops
+          if (!window.location.pathname.includes('/login')) {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('auth_user');
+            // Optional: Redirect to login or let the UI handle the missing token
+            // window.location.href = '/login'; 
+          }
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+
   // ==================== AUTHENTICATION ====================
 
   static async getCurrentUser(): Promise<User | null> {

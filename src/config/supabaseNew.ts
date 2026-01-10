@@ -309,6 +309,7 @@ export interface DashboardStats {
   availableBeds?: number; // Optional as it might be calculated
   netRevenue?: number;
   occupancyRate?: number;
+  details?: any;
 }
 
 // BED AVAILABILITY TYPE

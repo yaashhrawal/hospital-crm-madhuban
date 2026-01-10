@@ -18,7 +18,7 @@ import VitalsRecordingModal from './VitalsRecordingModal';
 import WalkInQueueModal from './WalkInQueueModal';
 
 const OPDQueueManager: React.FC = () => {
-    const [queues, setQueues] = useState<any[]>([]);
+    const [queue, setQueue] = useState<any[]>([]); // Renamed from queues to queue
     const [loading, setLoading] = useState(true);
     const [doctors, setDoctors] = useState<User[]>([]);
     const [selectedDoctor, setSelectedDoctor] = useState<string>('');
@@ -35,8 +35,8 @@ const OPDQueueManager: React.FC = () => {
         loadDoctors();
         loadQueues();
 
-        // Auto-refresh every 30 seconds
-        const interval = setInterval(loadQueues, 30000);
+        // Auto-refresh every 3 seconds for near real-time updates
+        const interval = setInterval(loadQueues, 3000);
         return () => clearInterval(interval);
     }, []);
 
@@ -56,7 +56,26 @@ const OPDQueueManager: React.FC = () => {
                 statusFilter !== 'all' ? statusFilter : undefined,
                 selectedDoctor || undefined
             );
-            setQueues(data);
+
+            // Map flat backend response to nested structure expected by UI
+            const mappedData = data.map((item: any) => ({
+                ...item,
+                patient: {
+                    id: item.patient_id,
+                    first_name: item.first_name,
+                    last_name: item.last_name,
+                    age: item.age,
+                    gender: item.gender,
+                    patient_id: item.patient_code
+                },
+                doctor: {
+                    id: item.doctor_id,
+                    first_name: item.doctor_name,
+                    last_name: item.doctor_last_name
+                }
+            }));
+
+            setQueue(mappedData); // Set queue
         } catch (error) {
             console.error('Failed to load queues', error);
             toast.error('Failed to load queue data');
@@ -65,13 +84,37 @@ const OPDQueueManager: React.FC = () => {
         }
     };
 
-    const handleStatusChange = async (queueId: string, newStatus: string) => {
+    const updateStatus = async (queueId: string, newStatus: string) => { // Defined updateStatus
         try {
-            await HospitalService.updateQueueStatus(queueId, newStatus);
+            await HospitalService.updateOPDQueueStatus(queueId, newStatus);
             toast.success(`Status updated to ${newStatus}`);
             loadQueues();
         } catch (error) {
             toast.error('Failed to update status');
+        }
+    };
+
+    const handleStatusChange = async (queueId: string, newStatus: string) => {
+        await updateStatus(queueId, newStatus);
+    };
+
+    const handleReorder = async (newQueue: any[]) => {
+        // Optimistic update
+        setQueue(newQueue);
+
+        try {
+            // Prepare the payload: array of { id, order }
+            const reorderPayload = newQueue.map((item, index) => ({
+                id: item.id,
+                order: index + 1
+            }));
+
+            await HospitalService.reorderOPDQueue(reorderPayload);
+            // toast.success('Queue order updated'); // Optional: don't spam toasts
+        } catch (error) {
+            console.error('Failed to persist queue order', error);
+            toast.error('Failed to save new order');
+            loadQueues(); // Revert on error
         }
     };
 
@@ -86,37 +129,17 @@ const OPDQueueManager: React.FC = () => {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'WAITING': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-            case 'VITALS_DONE': return 'bg-blue-100 text-blue-800 border-blue-200';
-            case 'IN_CONSULTATION': return 'bg-green-100 text-green-800 border-green-200';
-            case 'WAITING': return 'border-l-yellow-500'; // Changed to border-l for consistency with new design
-            case 'VITALS_DONE': return 'border-l-blue-500';
-            case 'IN_CONSULTATION': return 'border-l-green-500';
-            case 'COMPLETED': return 'border-l-gray-400';
-            case 'CANCELLED': return 'border-l-red-500';
-            default: return 'border-l-gray-300';
+            case 'WAITING': return 'bg-yellow-50 border-l-yellow-500 text-yellow-800';
+            case 'VITALS_DONE': return 'bg-blue-50 border-l-blue-500 text-blue-800';
+            case 'IN_CONSULTATION': return 'bg-green-50 border-l-green-500 text-green-800';
+            case 'COMPLETED': return 'bg-gray-50 border-l-gray-400 text-gray-600';
+            case 'CANCELLED': return 'bg-red-50 border-l-red-500 text-red-800';
+            default: return 'bg-gray-50 border-l-gray-300 text-gray-600';
         }
     };
 
     // Sort function for local state only (initially matches backend sort)
     // When dragging happens, the order is updated locally then sent to backend
-
-    const handleReorder = (newOrder: OPDQueueWithRelations[]) => {
-        setQueue(newOrder); // Optimistic update
-
-        // Prepare payload for backend
-        const reorderPayload = newOrder.map((item, index) => ({
-            id: item.id,
-            order: index + 1
-        }));
-
-        // Debounce or just send? For now just send, maybe debounce later if needed
-        HospitalService.reorderOPDQueue(reorderPayload).catch(err => {
-            console.error('Failed to save queue order', err);
-            toast.error('Failed to save new order');
-            loadQueues(); // Revert on failure
-        });
-    };
 
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-full flex flex-col">
@@ -148,7 +171,7 @@ const OPDQueueManager: React.FC = () => {
                     >
                         <option value="">All Doctors</option>
                         {doctors.map(doc => (
-                            <option key={doc.id} value={doc.id}>{doc.name}</option>
+                            <option key={doc.id} value={doc.id}>{doc.first_name} {doc.last_name}</option>
                         ))}
                     </select>
                 </div>
@@ -182,7 +205,7 @@ const OPDQueueManager: React.FC = () => {
                                     <div className="flex justify-between items-start">
                                         <div className="flex items-start gap-3">
                                             <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center font-bold text-gray-700 text-sm mt-1">
-                                                {index + 1}
+                                                {item.token_number}
                                             </div>
                                             <div>
                                                 <h3 className="font-bold text-gray-900 text-lg">
@@ -191,7 +214,7 @@ const OPDQueueManager: React.FC = () => {
                                                 <div className="text-sm text-gray-600 flex flex-col gap-1 mt-1">
                                                     <span className="flex items-center gap-1">
                                                         <Clock size={14} />
-                                                        Token #{item.token_number} • {item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                                                        Queue Pos #{index + 1} • {item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                                     </span>
                                                     {item.appointment_id && (
                                                         <span className="text-blue-600 font-medium text-xs bg-blue-50 px-2 py-0.5 rounded-full w-fit">
@@ -273,15 +296,22 @@ const OPDQueueManager: React.FC = () => {
             <WalkInQueueModal
                 isOpen={showWalkInModal}
                 onClose={() => { setShowWalkInModal(false); loadQueues(); }}
+                onSuccess={loadQueues}
+                doctors={doctors}
             />
 
-            {showVitalsModal && selectedPatientForVitals && (
+            {/* Vitals Modal */}
+            {selectedPatientForVitals && (
                 <VitalsRecordingModal
-                    patientId={selectedPatientForVitals.patient?.id || ''} // Access patient ID from nested object
-                    patientName={`${selectedPatientForVitals.patient?.first_name || ''} ${selectedPatientForVitals.patient?.last_name || ''}`}
-                    queueId={selectedPatientForVitals.id}
                     isOpen={showVitalsModal}
-                    onClose={() => { setShowVitalsModal(false); loadQueues(); }}
+                    onClose={() => setShowVitalsModal(false)}
+                    patientId={selectedPatientForVitals.patient?.id || selectedPatientForVitals.id}
+                    patientName={selectedPatientForVitals.name || `${selectedPatientForVitals.patient?.first_name} ${selectedPatientForVitals.patient?.last_name}`}
+                    queueId={selectedPatientForVitals.queueId || selectedPatientForVitals.id}
+                    onSuccess={() => {
+                        setShowVitalsModal(false);
+                        loadQueues();
+                    }}
                 />
             )}
         </div>

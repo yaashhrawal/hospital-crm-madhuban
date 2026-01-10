@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend API Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .log {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-left: 3px solid #0056B3;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend API Connection Test</h1>
+
+    <div id="env-check" class="test-section">
+        <h3>Environment Variables</h3>
+        <div id="env-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 1: Check Backend Server</h3>
+        <button onclick="testBackend()">Test Backend Connection</button>
+        <div id="backend-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 2: Login</h3>
+        <button onclick="testLogin()">Test Login</button>
+        <div id="login-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 3: Fetch Patients</h3>
+        <button onclick="testFetchPatients()">Fetch Patients</button>
+        <div id="patients-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test 4: Check LocalStorage</h3>
+        <button onclick="checkLocalStorage()">Check LocalStorage</button>
+        <div id="localstorage-result"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3002';
+        const logs = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+            logs.push(logEntry);
+            console.log(logEntry);
+        }
+
+        // Check environment on load
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('env-results').innerHTML = `
+                <p><strong>API URL:</strong> ${API_URL}</p>
+                <p><strong>Current Origin:</strong> ${window.location.origin}</p>
+            `;
+        });
+
+        async function testBackend() {
+            const resultDiv = document.getElementById('backend-result');
+            resultDiv.innerHTML = '<div class="log">Testing backend connection...</div>';
+
+            try {
+                const response = await fetch(`${API_URL}/api/patients`, {
+                    method: 'GET'
+                });
+
+                if (response.status === 401) {
+                    resultDiv.innerHTML = `<div class="log success">✅ Backend is running! (Got 401 Unauthorized - this is expected without auth token)</div>`;
+                } else if (response.ok) {
+                    resultDiv.innerHTML = `<div class="log success">✅ Backend is running and accessible!</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="log error">⚠️ Backend responded with status: ${response.status}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="log error">❌ Cannot connect to backend: ${error.message}</div>`;
+            }
+        }
+
+        async function testLogin() {
+            const resultDiv = document.getElementById('login-result');
+            resultDiv.innerHTML = '<div class="log">Attempting login...</div>';
+
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@indic.com',
+                        password: 'admin123'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    localStorage.setItem('auth_token', data.token);
+                    localStorage.setItem('auth_user', JSON.stringify(data.user));
+
+                    resultDiv.innerHTML = `
+                        <div class="log success">
+                            ✅ Login successful!<br>
+                            User: ${data.user.email}<br>
+                            Role: ${data.user.role}<br>
+                            Token: ${data.token.substring(0, 30)}...
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="log error">❌ Login failed: ${JSON.stringify(data)}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="log error">❌ Login error: ${error.message}</div>`;
+            }
+        }
+
+        async function testFetchPatients() {
+            const resultDiv = document.getElementById('patients-result');
+            const token = localStorage.getItem('auth_token');
+
+            if (!token) {
+                resultDiv.innerHTML = '<div class="log error">❌ No auth token found. Please login first.</div>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="log">Fetching patients...</div>';
+
+            try {
+                const response = await fetch(`${API_URL}/api/patients`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const patients = await response.json();
+
+                resultDiv.innerHTML = `
+                    <div class="log success">
+                        ✅ Successfully fetched ${patients.length} patients!<br><br>
+                        <strong>Sample patients:</strong>
+                        <pre>${JSON.stringify(patients.slice(0, 3).map(p => ({
+                            id: p.patient_id,
+                            name: `${p.first_name} ${p.last_name}`,
+                            age: p.age,
+                            gender: p.gender
+                        })), null, 2)}</pre>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="log error">❌ Failed to fetch patients: ${error.message}</div>`;
+            }
+        }
+
+        function checkLocalStorage() {
+            const resultDiv = document.getElementById('localstorage-result');
+            const token = localStorage.getItem('auth_token');
+            const user = localStorage.getItem('auth_user');
+
+            resultDiv.innerHTML = `
+                <div class="log">
+                    <strong>Auth Token:</strong> ${token ? '✅ Present (' + token.substring(0, 30) + '...)' : '❌ Not found'}<br>
+                    <strong>User Data:</strong> ${user ? '✅ Present' : '❌ Not found'}<br>
+                    ${user ? '<pre>' + JSON.stringify(JSON.parse(user), null, 2) + '</pre>' : ''}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

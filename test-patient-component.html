@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Component Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0056B3;
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .warning {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .info {
+            background: #d1ecf1;
+            border-color: #17a2b8;
+            color: #0c5460;
+        }
+        button {
+            background: #0056B3;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #004494;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .patient-list {
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #0056B3;
+            color: white;
+        }
+        tr:hover {
+            background: #f5f5f5;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+        .log-entry {
+            padding: 5px 10px;
+            margin: 3px 0;
+            background: #f9f9f9;
+            border-left: 3px solid #0056B3;
+            font-family: monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Patient Component Test - Exact Frontend Simulation</h1>
+
+        <div id="status"></div>
+
+        <div style="margin: 20px 0;">
+            <button onclick="runFullTest()">🚀 Run Full Test</button>
+            <button onclick="checkAuth()">🔐 Check Authentication</button>
+            <button onclick="testLogin()">🔑 Test Login</button>
+            <button onclick="loadPatients()">👥 Load Patients</button>
+            <button onclick="clearLogs()">🗑️ Clear Logs</button>
+        </div>
+
+        <div id="logs" style="margin-top: 20px;"></div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3002';
+        let logs = [];
+
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = { timestamp, message, type };
+            logs.push(entry);
+            updateLogs();
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateLogs() {
+            const logsDiv = document.getElementById('logs');
+            logsDiv.innerHTML = '<h3>📋 Test Logs:</h3>' +
+                logs.map(l => `<div class="log-entry">[${l.timestamp}] ${l.message}</div>`).join('');
+        }
+
+        function clearLogs() {
+            logs = [];
+            updateLogs();
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('status').innerHTML = '';
+        }
+
+        function showStatus(message, type = 'info') {
+            document.getElementById('status').innerHTML =
+                `<div class="status ${type}">${message}</div>`;
+        }
+
+        async function checkAuth() {
+            log('🔍 Checking authentication status...');
+
+            const token = localStorage.getItem('auth_token');
+            const user = localStorage.getItem('auth_user');
+
+            if (!token) {
+                showStatus('❌ No auth token found. Please login first.', 'error');
+                log('❌ No auth token in localStorage', 'error');
+                return false;
+            }
+
+            if (!user) {
+                showStatus('⚠️ Auth token found but no user data. Please re-login.', 'warning');
+                log('⚠️ Auth token exists but no user data', 'warning');
+                return false;
+            }
+
+            try {
+                const userData = JSON.parse(user);
+                showStatus(`✅ Authenticated as: ${userData.email} (${userData.role})`, 'success');
+                log(`✅ Authenticated as: ${userData.email}`, 'success');
+                return true;
+            } catch (error) {
+                showStatus('❌ Invalid user data in localStorage', 'error');
+                log('❌ Failed to parse user data', 'error');
+                return false;
+            }
+        }
+
+        async function testLogin() {
+            log('🔐 Testing login...');
+            showStatus('🔄 Logging in...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'admin@indic.com',
+                        password: 'admin123'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    localStorage.setItem('auth_token', data.token);
+                    localStorage.setItem('auth_user', JSON.stringify(data.user));
+
+                    showStatus(`✅ Login successful! User: ${data.user.email}`, 'success');
+                    log(`✅ Login successful for ${data.user.email}`, 'success');
+                    return true;
+                } else {
+                    showStatus(`❌ Login failed: ${data.error || 'Unknown error'}`, 'error');
+                    log(`❌ Login failed: ${JSON.stringify(data)}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                showStatus(`❌ Login error: ${error.message}`, 'error');
+                log(`❌ Login exception: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function loadPatients() {
+            log('👥 Starting patient load (simulating Patients.tsx)...');
+
+            // Check authentication first
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                showStatus('❌ No authentication token. Please login first.', 'error');
+                log('❌ Cannot load patients: No auth token', 'error');
+                return;
+            }
+
+            showStatus('🔄 Loading patients from backend...', 'info');
+            log(`📡 Fetching patients from backend API...`);
+
+            try {
+                // This simulates exactly what dataService.getPatients() does
+                const response = await fetch(`${API_URL}/api/patients`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        showStatus('❌ Authentication failed. Token may be expired. Please login again.', 'error');
+                        log('❌ 401 Unauthorized - Token expired or invalid', 'error');
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const patients = await response.json();
+
+                log(`✅ Patients loaded: ${patients.length}`, 'success');
+                showStatus(`✅ Successfully loaded ${patients.length} patients!`, 'success');
+
+                // Display patients in a table (simulating Table component)
+                displayPatients(patients);
+
+            } catch (error) {
+                showStatus(`❌ Failed to load patients: ${error.message}`, 'error');
+                log(`❌ Error loading patients: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+
+        function displayPatients(patients) {
+            const resultsDiv = document.getElementById('results');
+
+            if (patients.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div class="status warning">
+                        <h3>⚠️ No patients found</h3>
+                        <p>The database query returned 0 patients.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <div class="patient-list">
+                    <h3>👥 Patient List (${patients.length} total)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Patient ID</th>
+                                <th>Name</th>
+                                <th>Age</th>
+                                <th>Gender</th>
+                                <th>Phone</th>
+                                <th>Email</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            patients.forEach(p => {
+                const firstName = p.first_name || p.firstName || '';
+                const lastName = p.last_name || p.lastName || '';
+                html += `
+                    <tr>
+                        <td><strong>${p.patient_id || 'N/A'}</strong></td>
+                        <td>${firstName} ${lastName}</td>
+                        <td>${p.age || 'N/A'}</td>
+                        <td>${p.gender || 'N/A'}</td>
+                        <td>${p.phone || 'N/A'}</td>
+                        <td>${p.email || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                    <details style="margin-top: 20px;">
+                        <summary style="cursor: pointer; color: #0056B3; font-weight: bold;">
+                            📄 View Full Patient Data (JSON)
+                        </summary>
+                        <pre>${JSON.stringify(patients.slice(0, 2), null, 2)}</pre>
+                    </details>
+                </div>
+            `;
+
+            resultsDiv.innerHTML = html;
+        }
+
+        async function runFullTest() {
+            clearLogs();
+            log('🚀 Starting full test sequence...', 'info');
+
+            showStatus('🔄 Running full test...', 'info');
+
+            // Step 1: Check current auth
+            log('Step 1: Checking authentication...');
+            const isAuth = await checkAuth();
+
+            // Step 2: If not authenticated, try to login
+            if (!isAuth) {
+                log('Step 2: Not authenticated, attempting login...');
+                const loginSuccess = await testLogin();
+                if (!loginSuccess) {
+                    showStatus('❌ Test failed at login step', 'error');
+                    return;
+                }
+            } else {
+                log('Step 2: Already authenticated, skipping login');
+            }
+
+            // Step 3: Load patients
+            log('Step 3: Loading patients...');
+            await loadPatients();
+
+            log('✅ Full test sequence completed', 'success');
+        }
+
+        // Auto-check auth on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            log('Page loaded, checking initial state...');
+            checkAuth();
+        });
+    </script>
+</body>
+</html>

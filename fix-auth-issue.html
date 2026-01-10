@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix 403 Forbidden Error</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #dc3545;
+        }
+        .status {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .error { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 Fix 403 Forbidden Error</h1>
+
+        <div class="status error">
+            <strong>❌ Error Detected:</strong><br>
+            Your authentication token is <strong>invalid or expired</strong>.<br>
+            This causes a <strong>403 Forbidden</strong> error when fetching patients.
+        </div>
+
+        <h2>🛠️ Solution</h2>
+
+        <div class="status info">
+            <strong>Step 1:</strong> Clear your invalid authentication data<br>
+            <button class="danger" onclick="clearAuth()">🗑️ Clear Auth Data</button>
+        </div>
+
+        <div class="status info">
+            <strong>Step 2:</strong> Get a fresh authentication token<br>
+            <button onclick="login()">🔑 Login & Get New Token</button>
+        </div>
+
+        <div class="status info">
+            <strong>Step 3:</strong> Test if patients load correctly<br>
+            <button onclick="testPatients()">👥 Test Patient Loading</button>
+        </div>
+
+        <hr>
+
+        <h2>🚀 Quick Fix (All-in-One)</h2>
+        <button onclick="quickFix()" style="background: #28a745; font-size: 18px; padding: 15px 30px;">
+            ✨ Fix Everything Now
+        </button>
+
+        <div id="results" style="margin-top: 30px;"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3002';
+
+        function showResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="status ${type}">${message}</div>` + resultsDiv.innerHTML;
+        }
+
+        function clearAuth() {
+            const token = localStorage.getItem('auth_token');
+            const user = localStorage.getItem('auth_user');
+
+            if (token || user) {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+                showResult('✅ Cleared old authentication data. You can now login again.', 'success');
+                console.log('✅ Cleared localStorage auth data');
+            } else {
+                showResult('ℹ️ No authentication data found to clear.', 'info');
+            }
+        }
+
+        async function login() {
+            showResult('🔄 Logging in...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: 'admin@indic.com',
+                        password: 'admin123'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    localStorage.setItem('auth_token', data.token);
+                    localStorage.setItem('auth_user', JSON.stringify(data.user));
+
+                    showResult(`✅ <strong>Login Successful!</strong><br>
+                        User: ${data.user.email}<br>
+                        Role: ${data.user.role}<br>
+                        Token: ${data.token.substring(0, 40)}...<br><br>
+                        <strong>You can now reload your application to see patients!</strong>`, 'success');
+
+                    console.log('✅ New token stored:', data.token);
+                    return true;
+                } else {
+                    showResult(`❌ Login failed: ${data.error || 'Unknown error'}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                showResult(`❌ Login error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        async function testPatients() {
+            const token = localStorage.getItem('auth_token');
+
+            if (!token) {
+                showResult('❌ No auth token found. Please login first.', 'error');
+                return;
+            }
+
+            showResult('🔄 Testing patient API with new token...', 'info');
+
+            try {
+                const response = await fetch(`${API_URL}/api/patients`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.status === 403) {
+                    showResult('❌ Still getting 403 Forbidden. Token might still be invalid. Try logging in again.', 'error');
+                    return;
+                }
+
+                if (!response.ok) {
+                    showResult(`❌ Error: ${response.status} ${response.statusText}`, 'error');
+                    return;
+                }
+
+                const patients = await response.json();
+
+                showResult(`✅ <strong>Success!</strong> Loaded ${patients.length} patients<br><br>
+                    Sample patients:<br>
+                    <pre>${JSON.stringify(patients.slice(0, 2).map(p => ({
+                        id: p.patient_id,
+                        name: `${p.first_name} ${p.last_name}`,
+                        age: p.age
+                    })), null, 2)}</pre>
+                    <strong>🎉 Your application should now work! Reload the page.</strong>`, 'success');
+
+            } catch (error) {
+                showResult(`❌ Test failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function quickFix() {
+            showResult('🚀 Starting quick fix...', 'info');
+
+            // Step 1: Clear old auth
+            clearAuth();
+
+            // Wait a moment
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Step 2: Login
+            const loginSuccess = await login();
+
+            if (!loginSuccess) {
+                showResult('❌ Quick fix failed at login step. Please check backend server.', 'error');
+                return;
+            }
+
+            // Wait a moment
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Step 3: Test
+            await testPatients();
+
+            showResult(`
+                <h3>✅ Quick Fix Complete!</h3>
+                <strong>Next Steps:</strong><br>
+                1. Keep this page open (token is now in your browser)<br>
+                2. Go back to your application<br>
+                3. Reload the page (F5 or Ctrl+R)<br>
+                4. You should now see all patients!<br><br>
+                If you still have issues, make sure both pages are using the same browser/domain.
+            `, 'success');
+        }
+
+        // Auto-check on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                showResult(`ℹ️ Found existing token: ${token.substring(0, 40)}...<br>
+                    This token might be expired, causing the 403 error.`, 'info');
+            } else {
+                showResult('ℹ️ No token found in localStorage.', 'info');
+            }
+        });
+    </script>
+</body>
+</html>

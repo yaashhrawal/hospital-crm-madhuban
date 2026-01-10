@@ -69,6 +69,45 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
   const [customEndDate, setCustomEndDate] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  // Local storage appointments state - for patients with scheduled appointments
+  const [localAppointments, setLocalAppointments] = useState<any[]>([]);
+
+  // Load localStorage appointments
+  const loadLocalAppointments = () => {
+    try {
+      const stored = localStorage.getItem('hospital_appointments');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        console.log('📅 EnhancedDashboard - Loaded localStorage appointments:', parsed);
+        setLocalAppointments(parsed);
+      } else {
+        setLocalAppointments([]);
+      }
+    } catch (error) {
+      console.error('Error loading localStorage appointments:', error);
+      setLocalAppointments([]);
+    }
+  };
+
+  // Load appointments on mount and listen for updates
+  useEffect(() => {
+    loadLocalAppointments();
+
+    // Listen for appointment updates (from patient registration)
+    const handleAppointmentUpdate = () => {
+      console.log('📅 Appointment updated event received - reloading...');
+      loadLocalAppointments();
+    };
+
+    window.addEventListener('appointmentUpdated', handleAppointmentUpdate);
+    window.addEventListener('storage', handleAppointmentUpdate);
+
+    return () => {
+      window.removeEventListener('appointmentUpdated', handleAppointmentUpdate);
+      window.removeEventListener('storage', handleAppointmentUpdate);
+    };
+  }, []);
+
   // Helper function to fetch all transactions
   const fetchAllTransactions = async () => {
     try {
@@ -777,27 +816,7 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
     }
   };
 
-  // Listen for localStorage changes to update appointments
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'hospital_appointments') {
-        console.log('📅 Appointments updated in localStorage, refreshing...');
-        refetchAppointments();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    // Also check for changes from same tab (storage event doesn't fire for same tab)
-    const interval = setInterval(() => {
-      refetchAppointments();
-    }, 30000); // Refresh every 30 seconds
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(interval);
-    };
-  }, [refetchAppointments]);
+  // Note: localStorage appointment refreshing is handled by the useEffect above with loadLocalAppointments()
 
   // Handle appointment confirmation
   const handleConfirmAppointment = async (appointmentId: string) => {
@@ -810,6 +829,17 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
 
         if (appointmentIndex !== -1) {
           const appointment = appointments[appointmentIndex];
+
+          // Call backend API to set has_pending_appointment = false
+          // This makes the patient visible in the patient list
+          if (appointment.patient_uuid) {
+            try {
+              await HospitalService.acceptAppointment(appointment.patient_uuid);
+              console.log('✅ Backend API: Patient has_pending_appointment set to false');
+            } catch (apiError) {
+              console.error('⚠️ Backend API error (continuing with localStorage update):', apiError);
+            }
+          }
 
           // Remove the appointment from localStorage completely (confirmed appointments don't stay on dashboard)
           appointments.splice(appointmentIndex, 1);
@@ -824,8 +854,8 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             confirmed_at: new Date().toISOString()
           });
 
-          toast.success(`Appointment confirmed for ${appointment.patient_name}! Patient is now visible in patient list.`);
-          refetchAppointments();
+          toast.success(`Appointment accepted for ${appointment.patient_name}! Patient is now visible in patient list.`);
+          loadLocalAppointments(); // Refresh the appointments list
           refetchPatients(); // Refresh patient list to show the now-visible patient
           return;
         }
@@ -891,7 +921,8 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
             cancelled_at: new Date().toISOString()
           });
 
-          refetchAppointments();
+          toast.success(`Appointment rejected! Patient ${cancelledAppointment.patient_name} has been removed.`);
+          loadLocalAppointments(); // Refresh the appointments list
           // Also refresh patient data in case a patient was deleted
           refetchPatients();
           return;
@@ -1855,21 +1886,53 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
 
   // Filter appointments for selected date and next 7 days (exclude cancelled)
   const getUpcomingAppointments = () => {
-    if (!appointmentsData?.data) return [];
+    console.log('📅 getUpcomingAppointments called - localAppointments:', localAppointments);
 
-    const startDate = new Date(selectedDate);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(selectedDate);
-    endDate.setDate(endDate.getDate() + 7);
-    endDate.setHours(23, 59, 59, 999);
+    // Transform localStorage appointments to the display format
+    const transformedAppointments = localAppointments.map((apt: any) => ({
+      id: apt.id,
+      scheduled_at: apt.scheduled_at || `${apt.appointment_date}T${apt.appointment_time}:00`,
+      patient: apt.patient_name ? {
+        first_name: apt.patient_name.split(' ')[0] || '',
+        last_name: apt.patient_name.split(' ').slice(1).join(' ') || '',
+      } : null,
+      patient_name: apt.patient_name,
+      patient_uuid: apt.patient_uuid,
+      patient_id: apt.patient_id,
+      department: apt.department || 'General',
+      doctor_name: apt.doctor_name,
+      status: apt.status || 'scheduled',
+      appointment_type: apt.appointment_type,
+      requires_confirmation: apt.requires_confirmation !== false, // Default to true for pending appointments
+      notes: apt.notes,
+    }));
 
-    return appointmentsData.data.filter((appointment: any) => {
+    console.log('📅 Transformed appointments:', transformedAppointments);
+
+    // Filter: always show appointments requiring confirmation, otherwise filter by date
+    const filtered = transformedAppointments.filter((appointment: any) => {
       // Exclude cancelled appointments
       if (appointment.status === 'cancelled') return false;
 
+      // ALWAYS show appointments that require confirmation (pending Accept/Reject)
+      if (appointment.requires_confirmation === true) {
+        console.log('📅 Showing pending appointment:', appointment.patient_name);
+        return true;
+      }
+
+      // For confirmed appointments, filter by date range
+      const startDate = new Date(selectedDate);
+      startDate.setHours(0, 0, 0, 0);
+      const endDate = new Date(selectedDate);
+      endDate.setDate(endDate.getDate() + 7);
+      endDate.setHours(23, 59, 59, 999);
+
       const appointmentDate = new Date(appointment.scheduled_at);
       return appointmentDate >= startDate && appointmentDate <= endDate;
-    }).slice(0, 10);
+    });
+
+    console.log('📅 Filtered appointments (showing):', filtered.length);
+    return filtered.slice(0, 10);
   };
 
   const formatSelectedDateRange = () => {
@@ -2274,22 +2337,22 @@ export const EnhancedDashboard: React.FC<Props> = ({ onNavigate }) => {
                             <button
                               onClick={() => handleConfirmAppointment(appointment.id)}
                               className="flex-1 px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                              title="Confirm this appointment"
+                              title="Accept appointment - patient will appear in patient list"
                             >
-                              ✓ Confirm
+                              ✓ Accept
                             </button>
                           )}
                           {appointment.status === 'confirmed' && (
                             <span className="flex-1 px-2 py-1 text-xs bg-green-100 text-green-700 rounded text-center">
-                              ✓ Confirmed
+                              ✓ Accepted
                             </span>
                           )}
                           <button
                             onClick={() => handleCancelAppointment(appointment.id)}
                             className="flex-1 px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                            title="Cancel and remove this appointment"
+                            title="Reject appointment - patient will be removed"
                           >
-                            ✕ Cancel
+                            ✕ Reject
                           </button>
                         </div>
                       )}

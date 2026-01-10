@@ -91,9 +91,12 @@ export interface Patient {
   doctor_hospital_experience?: string; // Doctor's hospital experience from doctors table
   notes?: string;
   patient_tag?: string; // Patient categorization tag (Community, Camp, VIP, etc.)
+  aadhaar_number?: string; // 12-digit Aadhaar card number
+  abha_id?: string; // 14-digit ABHA ID (Ayushman Bharat Health Account)
   date_of_entry?: string; // Visit/entry date
   ipd_status?: 'OPD' | 'ADMITTED' | 'DISCHARGED'; // IPD admission status
   ipd_bed_number?: string; // Current IPD bed number
+  has_pending_appointment?: boolean; // Flag to hide patient from list when they have pending appointment
   hospital_id: string;
   is_active: boolean;
   created_at: string;
@@ -304,7 +307,11 @@ export interface CreatePatientData {
   assigned_doctors?: AssignedDoctor[]; // Multiple assigned doctors
   notes?: string;
   patient_tag?: string; // Patient categorization tag (Community, Camp, VIP, etc.)
+  aadhaar_number?: string; // 12-digit Aadhaar card number
+  abha_id?: string; // 14-digit ABHA ID (Ayushman Bharat Health Account)
+  photo_url?: string | null; // Patient photo URL
   date_of_entry?: string; // Visit/entry date
+  has_pending_appointment?: boolean; // Flag to hide patient from list when they have pending appointment
   hospital_id: string;
 }
 

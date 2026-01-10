@@ -828,6 +828,55 @@ export class HospitalService {
     }
   }
 
+  // Accept appointment - moves patient from pending to patient list
+  static async acceptAppointment(patientId: string): Promise<Patient> {
+    try {
+      logger.log('✅ Accepting appointment for patient:', patientId);
+      logger.log('📡 API URL:', `${this.getBaseUrl()}/api/patients/${patientId}/accept-appointment`);
+
+      const response = await axios.put(
+        `${this.getBaseUrl()}/api/patients/${patientId}/accept-appointment`,
+        {},
+        { headers: this.getHeaders() }
+      );
+
+      logger.log('✅ Appointment accepted successfully');
+      logger.log('👤 Patient now visible in patient list:', response.data.patient_id);
+
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('🚨 acceptAppointment error:', error);
+      logger.error('Error response:', error.response?.data);
+      throw error;
+    }
+  }
+
+  // Reject appointment - cancels appointment and removes patient
+  static async rejectAppointment(patientId: string, keepPatient = false): Promise<any> {
+    try {
+      logger.log('❌ Rejecting appointment for patient:', patientId);
+      logger.log('🗑️ Keep patient record:', keepPatient);
+      logger.log('📡 API URL:', `${this.getBaseUrl()}/api/patients/${patientId}/reject-appointment`);
+
+      const response = await axios.put(
+        `${this.getBaseUrl()}/api/patients/${patientId}/reject-appointment`,
+        { keep_patient: keepPatient },
+        { headers: this.getHeaders() }
+      );
+
+      logger.log('❌ Appointment rejected successfully');
+      logger.log('📋 Result:', response.data);
+
+      return response.data;
+
+    } catch (error: any) {
+      logger.error('🚨 rejectAppointment error:', error);
+      logger.error('Error response:', error.response?.data);
+      throw error;
+    }
+  }
+
   // ==================== DASHBOARD OPERATIONS ====================
 
   static async getDashboardStats(): Promise<DashboardStats> {

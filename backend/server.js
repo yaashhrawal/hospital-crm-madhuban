@@ -96,8 +96,8 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Also accept temp password for admin users
     if (!validPassword &&
-        (email === 'admin@indic.com' || email === 'admin@valant.com' || email === 'admin@hospital.com') &&
-        password === 'admin123') {
+      (email === 'admin@indic.com' || email === 'admin@valant.com' || email === 'admin@hospital.com') &&
+      password === 'admin123') {
       validPassword = true;
     }
 
@@ -317,7 +317,9 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
       assigned_department,
       has_reference,
       reference_details,
-      abha_id
+      abha_id,
+      aadhaar_number,
+      has_pending_appointment
     } = req.body;
 
     // Auto-generate patient_id in format M000001, M000002, etc.
@@ -372,18 +374,18 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
         id, patient_id, prefix, first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
         allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
-        photo_url, patient_tag, abha_id, assigned_doctor, assigned_department,
+        photo_url, patient_tag, abha_id, aadhaar_number, assigned_doctor, assigned_department,
         has_reference, reference_details, created_by, is_active,
-        queue_no, queue_status, queue_date
-      ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30)
+        queue_no, queue_status, queue_date, has_pending_appointment
+      ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       RETURNING *`,
       [
         generatedPatientId, prefix || 'Mr', first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
         allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
-        photo_url, patient_tag, abha_id, assigned_doctor, assigned_department,
+        photo_url, patient_tag, abha_id, aadhaar_number, assigned_doctor, assigned_department,
         has_reference, reference_details, req.user.id, true,
-        queueNumber, 'waiting', today
+        queueNumber, 'waiting', today, has_pending_appointment || false
       ]
     );
 
@@ -524,6 +526,73 @@ app.put('/api/queue/:id/status', authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating queue status:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Accept appointment - moves patient from pending to patient list
+app.put('/api/patients/:id/accept-appointment', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      `UPDATE patients
+       SET has_pending_appointment = false,
+           queue_status = 'waiting'
+       WHERE id = $1
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
+    console.log(`✅ Appointment accepted for patient ${result.rows[0].patient_id}`);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error accepting appointment:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Reject appointment - cancels appointment and optionally keeps patient hidden
+app.put('/api/patients/:id/reject-appointment', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { keep_patient } = req.body; // If true, keep patient but mark as rejected
+
+    if (keep_patient) {
+      // Just set is_active to false to hide patient
+      const result = await pool.query(
+        `UPDATE patients
+         SET has_pending_appointment = false,
+             is_active = false
+         WHERE id = $1
+         RETURNING *`,
+        [id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Patient not found' });
+      }
+
+      console.log(`❌ Appointment rejected for patient ${result.rows[0].patient_id} (patient deactivated)`);
+      res.json(result.rows[0]);
+    } else {
+      // Delete patient completely
+      await pool.query('DELETE FROM patient_transactions WHERE patient_id = $1', [id]);
+      const result = await pool.query('DELETE FROM patients WHERE id = $1 RETURNING patient_id', [id]);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Patient not found' });
+      }
+
+      console.log(`❌ Appointment rejected and patient ${result.rows[0].patient_id} deleted`);
+      res.json({ message: 'Appointment rejected and patient removed', patient_id: result.rows[0].patient_id });
+    }
+  } catch (error) {
+    console.error('Error rejecting appointment:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });

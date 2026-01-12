@@ -106,6 +106,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
     // Doctor and Department (single selection for backward compatibility)
     selected_department: '',
     selected_doctor: '',
+    doctor_id: '', // Added for queue integration
     custom_doctor_name: '',
     custom_department_name: '',
     // Multiple doctors selection
@@ -136,6 +137,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('');
+  const [dbDoctors, setDbDoctors] = useState<any[]>([]); // New state for DB doctors
   const [filteredDoctors, setFilteredDoctors] = useState(DOCTORS_DATA);
   const [selectedDoctors, setSelectedDoctors] = useState<any[]>([]);
   const [tempDepartment, setTempDepartment] = useState('');
@@ -154,10 +156,34 @@ const NewFlexiblePatientEntry: React.FC = () => {
   const [registeredPatient, setRegisteredPatient] = useState<any>(null);
 
   // Check connection status on mount
+  // Check connection status and fetch doctors on mount
   useEffect(() => {
     const checkConnection = async () => {
-      const status = await HospitalService.getConnectionStatus();
-      setConnectionStatus(status);
+      try {
+        const status = await HospitalService.getConnectionStatus();
+        setConnectionStatus(status);
+
+        // Fetch doctors
+        const docs = await HospitalService.getDoctors();
+        if (docs && docs.length > 0) {
+          setDbDoctors(docs);
+          // Map DB doctors to compatible format for dropdown if needed, 
+          // but we will prioritize matching DB doctors by name/department
+          const formattedDocs = docs.map(d => ({
+            id: d.id,
+            name: `DR. ${d.first_name} ${d.last_name}`.toUpperCase(),
+            department: d.department?.toUpperCase() || 'GENERAL',
+            consultationFee: d.consultation_fee
+          }));
+
+          // Merge legacy and DB doctors for display, prioritizing DB info if needed
+          // or just use DB doctors entirely if possible.
+          // For safety, we keep legacy list but know that real functionality (Queue) needs DB ID.
+          setDbDoctors(formattedDocs);
+        }
+      } catch (e) {
+        console.error('Init error:', e);
+      }
     };
     checkConnection();
   }, []);
@@ -718,6 +744,41 @@ const NewFlexiblePatientEntry: React.FC = () => {
           toast.success(`Appointment scheduled for ${formData.appointment_date ? formData.appointment_date.toLocaleDateString('en-IN') : 'selected date'} at ${formData.appointment_time}`);
         } catch (error) {
           logger.error('Error scheduling appointment:', error);
+        }
+      }
+
+      // Auto-add to OPD Queue if doctor is selected
+      if (formData.consultation_mode === 'single' && (formData.doctor_id || formData.selected_doctor)) {
+        try {
+          logger.log('🚶‍♂️ Auto-adding to OPD Queue...');
+          let doctorId = formData.doctor_id;
+
+          // Fallback: If no ID but name exists, try one last lookup
+          if (!doctorId && formData.selected_doctor && dbDoctors.length > 0) {
+            const foundDoc = dbDoctors.find(d => d.name === formData.selected_doctor);
+            doctorId = foundDoc?.id;
+          }
+
+          if (doctorId) {
+            const queuePayload = {
+              patient_id: newPatient.id,
+              doctor_id: doctorId,
+              priority: false,
+              notes: 'New Registration'
+            };
+            console.log('🚀 Auto-Queue Payload:', queuePayload);
+
+            await HospitalService.addToOPDQueue(queuePayload);
+            toast.success('Added to OPD Queue automatically');
+          } else {
+            console.warn('Skipping queue: No valid Doctor ID found for', formData.selected_doctor);
+          }
+        } catch (queueError: any) {
+          console.error('❌ Auto-queue failed:', queueError);
+          if (queueError.response) {
+            console.error('❌ Server Error Details:', queueError.response.data);
+          }
+          // Don't block registration success
         }
       }
 
@@ -1835,7 +1896,16 @@ const NewFlexiblePatientEntry: React.FC = () => {
                       </label>
                       <select
                         value={formData.selected_doctor}
-                        onChange={(e) => setFormData({ ...formData, selected_doctor: e.target.value })}
+                        onChange={(e) => {
+                          const selectedName = e.target.value;
+                          // Attempt to find the doctor in DB list to get ID
+                          const doc = dbDoctors.find(d => d.name === selectedName);
+                          setFormData({
+                            ...formData,
+                            selected_doctor: selectedName,
+                            doctor_id: doc?.id || ''
+                          });
+                        }}
                         disabled={!formData.selected_department}
                         style={{
                           width: '100%',
@@ -1852,9 +1922,13 @@ const NewFlexiblePatientEntry: React.FC = () => {
                         onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
                       >
                         <option value="">Select Doctor</option>
-                        {filteredDoctors.map(doc => (
-                          <option key={doc.name} value={doc.name}>{doc.name}</option>
-                        ))}
+                        {/* Show DB doctors if available, falling back to legacy list if needed, filtered by department */
+                          (dbDoctors.length > 0 ? dbDoctors : filteredDoctors)
+                            .filter(doc => !formData.selected_department || doc.department === formData.selected_department)
+                            .map(doc => (
+                              <option key={doc.name} value={doc.name}>{doc.name}</option>
+                            ))
+                        }
                         <option value="CUSTOM">Custom Doctor</option>
                       </select>
 

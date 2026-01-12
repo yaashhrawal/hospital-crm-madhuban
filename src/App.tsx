@@ -32,6 +32,7 @@ import DischargeSection from './components/DischargeSection';
 import AdminAuditLog from './components/AdminAuditLog';
 import HRMManagement from './components/HRMManagement';
 import QueueDisplayScreen from './components/QueueDisplayScreen';
+import OPDQueueManager from './components/OPD/OPDQueueManager';
 // import TableInspector from './components/TableInspector'; // Removed debug component
 import { Login } from './pages/Login/Login'; // Import 3D Login component
 // import HospitalServices from './components/HospitalServices'; // Removed - using patient-specific services instead
@@ -269,7 +270,7 @@ const App: React.FC = () => {
       // Update the current user state with new values
       // Note: This is a placeholder since we don't have a setCurrentUser method exposed from AuthContext
       // In a real implementation, you'd call an updateProfile method from AuthContext
-      
+
       setIsEditingProfile(false);
     } catch (error) {
       toast.error('Failed to update profile');
@@ -318,7 +319,7 @@ const App: React.FC = () => {
 
       // Get ALL patients data with all fields (no limits, including inactive)
       const patients = await HospitalService.getPatients(10000, true, true);
-      
+
       if (!patients) {
         logger.error('Error fetching patients for backup');
         toast.error('Failed to fetch patient data for backup');
@@ -875,6 +876,12 @@ const App: React.FC = () => {
       description: 'Display and manage patient queue with real-time updates'
     },
     {
+      id: 'opdQueue',
+      name: '🚶‍♂️ OPD Queue',
+      component: OPDQueueManager,
+      description: 'Manage OPD patient queue'
+    },
+    {
       id: 'ipd-beds',
       name: '🛏️ IPD Beds',
       component: IPDBedManagement,
@@ -1084,8 +1091,8 @@ const App: React.FC = () => {
           {/* All Navigation Tabs in Single Row */}
           <div
             className={`transition-all duration-500 ease-in-out transform ${(isNavVisible || !settings.autoHideNav)
-                ? 'translate-y-0 opacity-100 max-h-20'
-                : '-translate-y-full opacity-0 max-h-0 overflow-hidden'
+              ? 'translate-y-0 opacity-100 max-h-20'
+              : '-translate-y-full opacity-0 max-h-0 overflow-hidden'
               }`}
           >
             <nav className="flex justify-between gap-1 py-3 px-6">
@@ -1104,8 +1111,8 @@ const App: React.FC = () => {
                     setNavHideTimer(timer);
                   }}
                   className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab.id
-                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                      : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                    ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
                     }`}
                 >
                   {tab.name}
@@ -1377,8 +1384,8 @@ const App: React.FC = () => {
                         <p className="text-sm text-gray-600">
                           Hide navigation tabs after inactivity
                           <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${settings.autoHideNav
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-800'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
                             }`}>
                             {settings.autoHideNav ? 'ENABLED' : 'DISABLED'}
                           </span>

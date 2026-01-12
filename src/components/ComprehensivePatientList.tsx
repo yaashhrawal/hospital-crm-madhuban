@@ -13,6 +13,8 @@ import VHPrescription from './VHPrescription';
 import MultiplePrescriptionGenerator from './MultiplePrescriptionGenerator';
 import SimpleEnhancedPatientRecord from './SimpleEnhancedPatientRecord';
 import PatientServiceManager from './PatientServiceManager';
+import { UserPlus } from 'lucide-react';
+import AddToQueueModal from './OPD/AddToQueueModal';
 import VisitAgainModal from './VisitAgainModal';
 import { exportToExcel, formatCurrency, formatCurrencyForExcel, formatDate } from '../utils/excelExport';
 import { startOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format } from 'date-fns';
@@ -1476,8 +1478,29 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
   const [showMultiplePrescription, setShowMultiplePrescription] = useState(false);
   const [multiplePrescriptionType, setMultiplePrescriptionType] = useState<'valant' | 'vh'>('valant');
   const [selectedPatientForPrescription, setSelectedPatientForPrescription] = useState<PatientWithRelations | null>(null);
+  /* State for Patient Service Manager */
   const [showServiceManager, setShowServiceManager] = useState(false);
-  const [selectedPatientForServices, setSelectedPatientForServices] = useState<PatientWithRelations | null>(null);
+  const [selectedPatientForService, setSelectedPatientForService] = useState<PatientWithRelations | null>(null);
+
+  /* State for Add to Queue Modal */
+  const [showAddToQueueModal, setShowAddToQueueModal] = useState(false);
+  const [selectedPatientForQueue, setSelectedPatientForQueue] = useState<PatientWithRelations | null>(null);
+
+  // Fetch doctors on mount
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const docs = await HospitalService.getDoctors();
+        console.log('🩺 Fetched doctors in PatientList:', docs);
+        setDoctors(docs);
+      } catch (error) {
+        console.error('Error fetching doctors:', error);
+      }
+    };
+    fetchDoctors();
+  }, []);
+
+  /* State for Visit Again Modal */
   const [showVisitAgainModal, setShowVisitAgainModal] = useState(false);
   const [selectedPatientForVisitAgain, setSelectedPatientForVisitAgain] = useState<PatientWithRelations | null>(null);
   const { printConsultationReceipt } = useReceiptPrinting();
@@ -2764,6 +2787,22 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
                         🗑️ Delete
                       </button>
                     )}
+
+                    {/* Add to Queue */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPatientForQueue(patient);
+                        setShowAddToQueueModal(true);
+                      }}
+                      className="bg-white text-green-600 border border-green-200 px-3 py-2 rounded-lg text-xs hover:bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500 font-medium"
+                      title="Add to OPD Queue"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <UserPlus size={14} />
+                        <span>Add to Queue</span>
+                      </div>
+                    </button>
                   </div>
                 </div>
               </div>

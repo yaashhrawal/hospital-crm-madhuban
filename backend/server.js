@@ -489,8 +489,19 @@ app.get('/api/opd-queues', authenticateToken, async (req, res) => {
 
     let query = `
       SELECT
-        id, patient_id, first_name, last_name, age, gender, phone,
-        queue_no, queue_status, queue_date, assigned_doctor, created_at
+        id,
+        patient_id,
+        first_name,
+        last_name,
+        age,
+        gender,
+        phone,
+        patient_id as patient_code,
+        queue_no,
+        COALESCE(queue_status, 'waiting') as queue_status,
+        queue_date,
+        assigned_doctor,
+        created_at
       FROM patients
       WHERE queue_date = $1
     `;
@@ -514,7 +525,16 @@ app.get('/api/opd-queues', authenticateToken, async (req, res) => {
     query += ` ORDER BY queue_no ASC`;
 
     const result = await pool.query(query, params);
-    res.json(result.rows);
+
+    // Ensure all rows have required fields with defaults
+    const sanitizedRows = result.rows.map(row => ({
+      ...row,
+      queue_status: row.queue_status || 'waiting',
+      queue_no: row.queue_no || 0,
+      assigned_doctor: row.assigned_doctor || 'Unassigned'
+    }));
+
+    res.json(sanitizedRows);
   } catch (error) {
     console.error('Error fetching OPD queues:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
@@ -569,6 +589,23 @@ app.post('/api/opd-queues', authenticateToken, async (req, res) => {
       queueNumber = lastQueueResult.rows[0].queue_no + 1;
     }
 
+    // Resolve Doctor ID to Name (Legacy Compatibility)
+    let doctorName = null;
+    if (doctor_id) {
+      try {
+        const docResult = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [doctor_id]);
+        if (docResult.rows.length > 0) {
+          const doc = docResult.rows[0];
+          doctorName = `Dr. ${doc.first_name} ${doc.last_name}`;
+        }
+      } catch (err) {
+        console.warn('Could not resolve doctor name from ID:', doctor_id);
+      }
+    }
+
+    // Use doctorName if resolved, otherwise if doctor_id doesn't look like UUID, maybe it's a name? 
+    const finalDoctorValue = doctorName || (doctor_id && !doctor_id.match(/^[0-9a-fA-F-]{36}$/) ? doctor_id : null);
+
     // Update patient record
     // We update assigned_doctor if provided, else keep existing.
     // We set status to 'waiting'.
@@ -594,7 +631,7 @@ app.post('/api/opd-queues', authenticateToken, async (req, res) => {
     // but patients table has 'notes'. Let's not overwrite main medical notes with queue notes unless intended.
     // We'll skip notes update for now to be safe, or append to a queue-specific log if we had one.
 
-    const result = await pool.query(updateQuery, [queueNumber, today, doctor_id, patient_id]);
+    const result = await pool.query(updateQuery, [queueNumber, today, finalDoctorValue, patient_id]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Patient not found' });
@@ -610,13 +647,26 @@ app.post('/api/opd-queues', authenticateToken, async (req, res) => {
 });
 
 // Update queue status
-app.put('/api/queue/:id/status', authenticateToken, async (req, res) => {
+app.put('/api/opd-queues/:id/status', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { queue_status } = req.body;
+    let { queue_status } = req.body;
+
+    // Normalize status to lowercase and map common values
+    const statusMap = {
+      'WAITING': 'waiting',
+      'waiting': 'waiting',
+      'IN_CONSULTATION': 'called',
+      'called': 'called',
+      'COMPLETED': 'completed',
+      'completed': 'completed',
+      'VITALS_DONE': 'waiting' // Map VITALS_DONE to waiting
+    };
+
+    queue_status = statusMap[queue_status] || queue_status.toLowerCase();
 
     if (!['waiting', 'called', 'completed'].includes(queue_status)) {
-      return res.status(400).json({ error: 'Invalid queue status' });
+      return res.status(400).json({ error: 'Invalid queue status', received: queue_status });
     }
 
     const result = await pool.query(
@@ -635,6 +685,33 @@ app.put('/api/queue/:id/status', authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating queue status:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Reorder OPD Queue
+app.post('/api/opd-queues/reorder', authenticateToken, async (req, res) => {
+  try {
+    const { items } = req.body; // Array of { id, order }
+
+    if (!items || !Array.isArray(items)) {
+      return res.status(400).json({ error: 'Invalid request: items array required' });
+    }
+
+    // Update queue_no for each patient based on new order
+    const updatePromises = items.map(item =>
+      pool.query(
+        'UPDATE patients SET queue_no = $1 WHERE id = $2',
+        [item.order, item.id]
+      )
+    );
+
+    await Promise.all(updatePromises);
+
+    console.log(`🔄 Reordered ${items.length} queue items`);
+    res.json({ success: true, message: 'Queue reordered successfully' });
+  } catch (error) {
+    console.error('Error reordering queue:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
@@ -1664,12 +1741,12 @@ app.delete('/api/billing/clear-all', authenticateToken, async (req, res) => {
 app.get('/api/uhid/config', authenticateToken, async (req, res) => {
   try {
     const hospitalId = req.query.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
-    
+
     const result = await pool.query(
       'SELECT * FROM uhid_config WHERE hospital_id = $1',
       [hospitalId]
     );
-    
+
     if (result.rows.length === 0) {
       // Return default config if not exists
       return res.json({
@@ -1679,7 +1756,7 @@ app.get('/api/uhid/config', authenticateToken, async (req, res) => {
         hospital_id: hospitalId
       });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error fetching UHID config:', error);
@@ -1691,7 +1768,7 @@ app.get('/api/uhid/config', authenticateToken, async (req, res) => {
 app.post('/api/uhid/generate', authenticateToken, async (req, res) => {
   try {
     const hospitalId = req.body.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
-    
+
     // Try using the database function first
     try {
       const result = await pool.query(
@@ -1703,20 +1780,20 @@ app.post('/api/uhid/generate', authenticateToken, async (req, res) => {
       // Function might not exist, fall back to manual generation
       console.log('generate_uhid function not found, using manual generation');
     }
-    
+
     // Manual UHID generation with atomic update
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
+
       // Get or create config with row lock
       let configResult = await client.query(
         'SELECT * FROM uhid_config WHERE hospital_id = $1 FOR UPDATE',
         [hospitalId]
       );
-      
+
       let prefix, sequence;
-      
+
       if (configResult.rows.length === 0) {
         // Create config if not exists
         const insertResult = await client.query(
@@ -1739,13 +1816,13 @@ app.post('/api/uhid/generate', authenticateToken, async (req, res) => {
         prefix = updateResult.rows[0].prefix;
         sequence = updateResult.rows[0].current_sequence;
       }
-      
+
       await client.query('COMMIT');
-      
+
       // Format UHID: MH-2026-000001
       const year = new Date().getFullYear();
       const uhid = `${prefix}-${year}-${String(sequence).padStart(6, '0')}`;
-      
+
       res.json({ uhid });
     } catch (err) {
       await client.query('ROLLBACK');
@@ -1766,10 +1843,10 @@ app.put('/api/uhid/config', authenticateToken, async (req, res) => {
     if (req.user.role !== 'ADMIN') {
       return res.status(403).json({ error: 'Unauthorized' });
     }
-    
+
     const { prefix, year_format, hospital_id } = req.body;
     const hospitalId = hospital_id || '550e8400-e29b-41d4-a716-446655440000';
-    
+
     const result = await pool.query(
       `INSERT INTO uhid_config (prefix, year_format, hospital_id)
        VALUES ($1, $2, $3)
@@ -1778,7 +1855,7 @@ app.put('/api/uhid/config', authenticateToken, async (req, res) => {
        RETURNING *`,
       [prefix || 'MH', year_format || 'YYYY', hospitalId]
     );
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Error updating UHID config:', error);
@@ -1790,23 +1867,23 @@ app.put('/api/uhid/config', authenticateToken, async (req, res) => {
 app.get('/api/uhid/next', authenticateToken, async (req, res) => {
   try {
     const hospitalId = req.query.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
-    
+
     const result = await pool.query(
       'SELECT prefix, current_sequence FROM uhid_config WHERE hospital_id = $1',
       [hospitalId]
     );
-    
+
     let prefix = 'MH';
     let nextSequence = 1;
-    
+
     if (result.rows.length > 0) {
       prefix = result.rows[0].prefix;
       nextSequence = result.rows[0].current_sequence + 1;
     }
-    
+
     const year = new Date().getFullYear();
     const nextUhid = `${prefix}-${year}-${String(nextSequence).padStart(6, '0')}`;
-    
+
     res.json({ next_uhid: nextUhid, sequence: nextSequence });
   } catch (error) {
     console.error('Error getting next UHID:', error);
@@ -1817,6 +1894,42 @@ app.get('/api/uhid/next', authenticateToken, async (req, res) => {
 // Catch-all handler: send back React's index.html file for client-side routing
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
+
+// ==================== ICD-10 ROUTES ====================
+
+// Search ICD-10 codes
+app.get('/api/icd10', async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+
+    const query = `
+      SELECT code, description 
+      FROM icd10_codes 
+      WHERE (code ILIKE $1 OR description ILIKE $1) AND active = true
+      ORDER BY 
+        CASE 
+          WHEN code ILIKE $2 THEN 1 
+          WHEN description ILIKE $2 THEN 2 
+          ELSE 3 
+        END,
+        code ASC
+      LIMIT 20
+    `;
+
+    const searchTerm = `%${q}%`;
+    const startTerm = `${q}%`;
+
+    const result = await pool.query(query, [searchTerm, startTerm]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error searching ICD-10 codes:', error);
+    res.status(500).json({ error: 'Failed to search ICD-10 codes' });
+  }
 });
 
 app.listen(PORT, () => {

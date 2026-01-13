@@ -48,6 +48,8 @@ interface DiagnosisData {
   performingDoctor: string;
   performingNurse: string;
   treatmentGiven: string;
+  icdCode?: string;
+  icdDescription?: string;
 }
 
 interface PrescriptionMedicine {
@@ -75,12 +77,12 @@ interface PrescriptionMedicine {
   netAmt: number;
 }
 
-const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = ({ 
-  patient, 
-  onClose 
+const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = ({
+  patient,
+  onClose
 }) => {
   const [activeTab, setActiveTab] = useState('highRisk');
-  
+
   // State for each section
   const [highRisks, setHighRisks] = useState<HighRiskData[]>([]);
   const [chiefComplaints, setChiefComplaints] = useState<ChiefComplaintData[]>([]);
@@ -88,14 +90,14 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
   const [investigations, setInvestigations] = useState<InvestigationData[]>([]);
   const [diagnoses, setDiagnoses] = useState<DiagnosisData[]>([]);
   const [prescriptions, setPrescriptions] = useState<PrescriptionMedicine[]>([]);
-  
+
   // Current form data
   const [currentHighRisk, setCurrentHighRisk] = useState<HighRiskData>({
     condition: '',
     identifiedDate: '',
     notes: ''
   });
-  
+
   const [currentChiefComplaint, setCurrentChiefComplaint] = useState<ChiefComplaintData>({
     complaint: '',
     period: '',
@@ -121,15 +123,52 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
     performingNurse: '',
     notes: ''
   });
-  
+
   const [currentDiagnosis, setCurrentDiagnosis] = useState<DiagnosisData>({
     diagnosis: '',
     isHighRisk: false,
     performingDoctor: '',
     performingNurse: '',
-    treatmentGiven: ''
+    treatmentGiven: '',
+    icdCode: '',
+    icdDescription: ''
   });
-  
+
+  // ICD-10 Search State
+  const [diagnosisSearchTerm, setDiagnosisSearchTerm] = useState('');
+  const [icdResults, setIcdResults] = useState<{ code: string; description: string }[]>([]);
+  const [showDiagnosisSearchResults, setShowDiagnosisSearchResults] = useState(false);
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // ICD-10 Search Effect
+  useEffect(() => {
+    if (diagnosisSearchTerm.length >= 2) {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          // Use HospitalService to search ICD-10
+          const results = await HospitalService.searchICD10(diagnosisSearchTerm);
+          setIcdResults(results);
+          setShowDiagnosisSearchResults(results.length > 0);
+        } catch (error) {
+          console.error('Error searching ICD-10:', error);
+          setIcdResults([]);
+        }
+      }, 300);
+    } else {
+      setIcdResults([]);
+      setShowDiagnosisSearchResults(false);
+    }
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [diagnosisSearchTerm]);
+
+
   const [currentPrescription, setCurrentPrescription] = useState<PrescriptionMedicine>({
     medicineName: '',
     genericName: '',
@@ -157,20 +196,20 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
 
   // Data constants
   const HIGH_RISK_CONDITIONS = [
-    'COVID19', 'Dengue', 'HIV', 'HbsAg', 'Thalassemia', 
+    'COVID19', 'Dengue', 'HIV', 'HbsAg', 'Thalassemia',
     'Rh negative mother', 'Heart disease', 'Polio', 'Hyper thyroid', 'Envron'
   ];
 
   const CHIEF_COMPLAINTS = [
-    'Abdominal Aortic Aneurysm', 'Acute Bronchitis', 'Abdominal pain', 
-    'Angina Pectoris', 'Dyspnea', 'Fever on and off', 'Hand Pain', 
-    'Knee Pain', 'Long Back Pain', 'Obesity', 'Restlessness', 
-    'Rheumatic Arthritis', 'Sinusitis', 'Snoring', 'Difficulty to walk', 
+    'Abdominal Aortic Aneurysm', 'Acute Bronchitis', 'Abdominal pain',
+    'Angina Pectoris', 'Dyspnea', 'Fever on and off', 'Hand Pain',
+    'Knee Pain', 'Long Back Pain', 'Obesity', 'Restlessness',
+    'Rheumatic Arthritis', 'Sinusitis', 'Snoring', 'Difficulty to walk',
     'Urinary tract infection', 'Ventricular Fibrillation'
   ];
 
   const EXAMINATION_TYPES = [
-    'Abdominal palpation', 'EBC', 'Inspection', 'Left foot', 
+    'Abdominal palpation', 'EBC', 'Inspection', 'Left foot',
     'MSE', 'Physical Examination', 'Right knee'
   ];
 
@@ -183,13 +222,13 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
   ];
 
   const DIAGNOSES_LIST = [
-    'Anemia', 'Atrial Fibrillation', 'Abdominal pain', 'Fever', 
-    'Fracture mandible condyle of femur', 'Inter vertebral disc prolapse', 
+    'Anemia', 'Atrial Fibrillation', 'Abdominal pain', 'Fever',
+    'Fracture mandible condyle of femur', 'Inter vertebral disc prolapse',
     'Urinary tract infection', 'Diabetes', 'Hypertension', 'Pneumonia'
   ];
 
   const MEDICINES_LIST = [
-    'NEORELAX SP', 'VELOZ 20 MG TAB', 'BECOUSULES CAP', 
+    'NEORELAX SP', 'VELOZ 20 MG TAB', 'BECOUSULES CAP',
     'Paracetamol', 'Ibuprofen', 'Amoxicillin', 'Metformin'
   ];
 
@@ -199,7 +238,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
   // Dynamic data from database/services
   const [doctorsList, setDoctorsList] = useState<string[]>([]);
   const [complaintsList, setComplaintsList] = useState<any[]>([]);
-  
+
   // Custom add states
   const [showCustomComplaint, setShowCustomComplaint] = useState(false);
   const [showCustomDoctor, setShowCustomDoctor] = useState(false);
@@ -254,8 +293,24 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
       toast.error('Please select a diagnosis');
       return;
     }
-    setDiagnoses([...diagnoses, { ...currentDiagnosis }]);
-    setCurrentDiagnosis({ diagnosis: '', isHighRisk: false, performingDoctor: '', performingNurse: '', treatmentGiven: '' });
+    const diagnosisText = currentDiagnosis.icdCode
+      ? `[ICD: ${currentDiagnosis.icdCode}] ${currentDiagnosis.diagnosis}`
+      : currentDiagnosis.diagnosis;
+
+    setDiagnoses([...diagnoses, {
+      ...currentDiagnosis,
+      diagnosis: diagnosisText
+    }]);
+    setCurrentDiagnosis({
+      diagnosis: '',
+      isHighRisk: false,
+      performingDoctor: '',
+      performingNurse: '',
+      treatmentGiven: '',
+      icdCode: '',
+      icdDescription: ''
+    });
+    setDiagnosisSearchTerm('');
     toast.success('Diagnosis added');
   };
 
@@ -309,8 +364,8 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
         prescriptions: prescriptions.length
       }
     });
-    
-    
+
+
     try {
       // Transform data to match database schema
       const recordData = {
@@ -318,7 +373,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           risk_factors: highRisks.map(hr => hr.condition),
           notes: highRisks.map(hr => hr.notes).join('; ')
         } : null,
-        
+
         chiefComplaints: chiefComplaints.map(cc => ({
           complaint: cc.complaint,
           duration: cc.presentHistory,
@@ -327,21 +382,21 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           notes: cc.notes,
           complaint_date: new Date().toISOString().split('T')[0]
         })),
-        
+
         examination: examinations.length > 0 ? {
           general_appearance: examinations.map(e => `${e.examinationType}: ${e.notes}`).join('; '),
           examined_by: examinations[0]?.performingDoctor,
           examination_date: new Date().toISOString().split('T')[0],
           notes: examinations.map(e => e.notes).join('; ')
         } : null,
-        
+
         investigation: investigations.length > 0 ? {
           laboratory_tests: investigations.map(i => `${i.service}: ${i.testResults}`).join('; '),
           requested_by: investigations[0]?.performingDoctor,
           investigation_date: new Date().toISOString().split('T')[0],
           notes: investigations.map(i => i.notes).join('; ')
         } : null,
-        
+
         diagnosis: diagnoses.length > 0 ? {
           primary_diagnosis: diagnoses[0]?.diagnosis || '',
           secondary_diagnosis: diagnoses.slice(1).map(d => d.diagnosis).join('; '),
@@ -349,14 +404,14 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           diagnosis_date: new Date().toISOString().split('T')[0],
           notes: diagnoses.map(d => d.treatmentGiven).join('; ')
         } : null,
-        
+
         prescription: prescriptions.length > 0 ? {
           medications: prescriptions,
           prescribed_by: prescriptions[0]?.performingDoctor,
           prescription_date: new Date().toISOString().split('T')[0],
           notes: prescriptions.map(p => p.instructions).join('; ')
         } : null,
-        
+
         summary: {
           summary: `Complete patient record with ${highRisks.length + chiefComplaints.length + examinations.length + investigations.length + diagnoses.length + prescriptions.length} total entries`,
           created_by: 'system',
@@ -386,20 +441,20 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
         // Load doctors from service
         const doctors = DoctorService.getAllDoctors();
         setDoctorsList(doctors.map(doc => doc.name));
-        
+
         // Load pain complaints from database
         const complaints = await HospitalService.getPainComplaints();
         setComplaintsList(complaints);
 
         // Load existing saved medical record from database
         console.log(`🔍 Loading saved record for patient: ${patient.patient_id}`);
-        
+
         const savedRecord = await CompletePatientRecordService.getCompletePatientRecord(patient.patient_id);
         console.log(`📄 Saved record found:`, !!savedRecord);
-        
+
         if (savedRecord) {
           console.log('✅ Loading existing medical record from database:', savedRecord);
-          
+
           // Transform database data back to component format
           const loadedHighRisks: HighRiskData[] = [];
           const loadedChiefComplaints: ChiefComplaintData[] = [];
@@ -407,7 +462,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           const loadedInvestigations: InvestigationData[] = [];
           const loadedDiagnoses: DiagnosisData[] = [];
           const loadedPrescriptions: PrescriptionMedicine[] = [];
-            
+
           // Load high risk data
           if (savedRecord.highRisk?.risk_factors) {
             savedRecord.highRisk.risk_factors.forEach((factor: string, index: number) => {
@@ -418,7 +473,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               });
             });
           }
-          
+
           // Load chief complaints
           if (savedRecord.chiefComplaints?.length > 0) {
             savedRecord.chiefComplaints.forEach((cc: any) => {
@@ -431,7 +486,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               });
             });
           }
-          
+
           // Load examinations
           if (savedRecord.examination) {
             loadedExaminations.push({
@@ -443,7 +498,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               notes: savedRecord.examination.general_appearance || ''
             });
           }
-          
+
           // Load investigations
           if (savedRecord.investigation) {
             loadedInvestigations.push({
@@ -455,7 +510,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               notes: savedRecord.investigation.notes || ''
             });
           }
-          
+
           // Load diagnoses
           if (savedRecord.diagnosis) {
             loadedDiagnoses.push({
@@ -465,7 +520,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               performingNurse: '',
               treatmentGiven: savedRecord.diagnosis.notes || ''
             });
-            
+
             if (savedRecord.diagnosis.secondary_diagnosis) {
               loadedDiagnoses.push({
                 diagnosis: savedRecord.diagnosis.secondary_diagnosis,
@@ -476,37 +531,37 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               });
             }
           }
-          
+
           // Load prescriptions
           if (savedRecord.prescription?.medications?.length > 0) {
             savedRecord.prescription.medications.forEach((med: any) => {
               loadedPrescriptions.push(med);
             });
           }
-          
+
           setHighRisks(loadedHighRisks);
           setChiefComplaints(loadedChiefComplaints);
           setExaminations(loadedExaminations);
           setInvestigations(loadedInvestigations);
           setDiagnoses(loadedDiagnoses);
           setPrescriptions(loadedPrescriptions);
-          
-          const totalRecords = loadedHighRisks.length + loadedChiefComplaints.length + 
-                             loadedExaminations.length + loadedInvestigations.length +
-                             loadedDiagnoses.length + loadedPrescriptions.length;
-          
+
+          const totalRecords = loadedHighRisks.length + loadedChiefComplaints.length +
+            loadedExaminations.length + loadedInvestigations.length +
+            loadedDiagnoses.length + loadedPrescriptions.length;
+
           console.log(`📋 Successfully loaded ${totalRecords} medical records from database`);
           toast.success(`Loaded existing medical record from database! (${totalRecords} total entries)`);
         } else {
           console.log('📝 No previous medical record found for this patient');
         }
-        
+
       } catch (error) {
         console.error('Failed to load dynamic data:', error);
         toast.error('Failed to load doctors and complaints');
       }
     };
-    
+
     loadData();
   }, [patient.patient_id]);
 
@@ -537,21 +592,21 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
       toast.error('Please enter a complaint');
       return;
     }
-    
+
     setAddingComplaint(true);
     try {
       await CompletePatientRecordService.addCustomComplaint(newComplaint.trim());
-      
+
       // Add to local state
       setComplaintsList(prev => [...prev, newComplaint.trim()]);
-      
+
       // Set in current complaint
       setCurrentChiefComplaint(prev => ({ ...prev, complaint: newComplaint.trim() }));
-      
+
       // Clear and hide
       setNewComplaint('');
       setShowCustomComplaint(false);
-      
+
       toast.success('Custom complaint added to database successfully!');
     } catch (error) {
       console.error('Failed to add custom complaint:', error);
@@ -567,23 +622,23 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
       toast.error('Please enter a doctor name');
       return;
     }
-    
+
     setAddingDoctor(true);
     try {
       const doctorName = newDoctor.trim();
-      
+
       await CompletePatientRecordService.addCustomDoctor(doctorName);
-      
+
       // Add to local doctors list
       setDoctorsList(prev => [...prev, doctorName]);
-      
+
       // Set in current complaint
       setCurrentChiefComplaint(prev => ({ ...prev, performingDoctor: doctorName }));
-      
+
       // Clear and hide
       setNewDoctor('');
       setShowCustomDoctor(false);
-      
+
       toast.success('Custom doctor added to database successfully!');
     } catch (error) {
       console.error('Failed to add custom doctor:', error);
@@ -642,11 +697,10 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`px-6 py-3 font-medium whitespace-nowrap ${
-                activeTab === tab.key
+              className={`px-6 py-3 font-medium whitespace-nowrap ${activeTab === tab.key
                   ? 'border-b-2 text-blue-600'
                   : 'text-gray-600 hover:text-blue-600'
-              }`}
+                }`}
               style={{ borderBottomColor: activeTab === tab.key ? '#0056B3' : 'transparent' }}
             >
               {tab.icon} {tab.label}
@@ -660,7 +714,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           {activeTab === 'highRisk' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold">High Risk Conditions</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Select High Risk</label>
@@ -675,7 +729,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Identified Date</label>
                   <input
@@ -685,7 +739,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     className="w-full p-2 border rounded"
                   />
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Notes</label>
                   <input
@@ -697,7 +751,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   />
                 </div>
               </div>
-              
+
               <div className="flex gap-2">
                 <button
                   onClick={addHighRisk}
@@ -713,7 +767,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   Reset
                 </button>
               </div>
-              
+
               {/* Display added high risks */}
               {highRisks.length > 0 && (
                 <div className="mt-6">
@@ -746,7 +800,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           {activeTab === 'chiefComplaints' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold">Chief Complaints</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Select Complaint</label>
@@ -764,7 +818,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                         <option key={complaint} value={complaint}>{complaint}</option>
                       ))}
                     </select>
-                    
+
                     {/* Add Custom Complaint */}
                     {!showCustomComplaint ? (
                       <button
@@ -807,7 +861,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     )}
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Period</label>
                   <div className="flex gap-2">
@@ -827,7 +881,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                         <option key={num} value={num}>{num}</option>
                       ))}
                     </select>
-                    
+
                     {/* Unit dropdown (D,W,M,Y) */}
                     <select
                       value={currentChiefComplaint.period.split(' ')[1] || ''}
@@ -846,7 +900,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                       <option value="Y">Y</option>
                     </select>
                   </div>
-                  
+
                   {/* Display selected period */}
                   {currentChiefComplaint.period && (
                     <div className="mt-1 text-sm text-gray-600">
@@ -854,7 +908,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     </div>
                   )}
                 </div>
-                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Present History</label>
                   <textarea
@@ -879,7 +933,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                         <option key={doctor} value={doctor}>{doctor}</option>
                       ))}
                     </select>
-                    
+
                     {/* Add Custom Doctor */}
                     {!showCustomDoctor ? (
                       <button
@@ -922,7 +976,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     )}
                   </div>
                 </div>
-                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Notes</label>
                   <textarea
@@ -934,7 +988,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   />
                 </div>
               </div>
-              
+
               <button
                 onClick={addChiefComplaint}
                 className="px-4 py-2 text-white rounded"
@@ -942,7 +996,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               >
                 Add Chief Complaint
               </button>
-              
+
               {/* Display added complaints */}
               {chiefComplaints.length > 0 && (
                 <div className="mt-6">
@@ -977,7 +1031,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           {activeTab === 'examination' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold">Examination</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Select Examination</label>
@@ -992,7 +1046,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Problem Since</label>
                   <input
@@ -1045,7 +1099,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     ))}
                   </select>
                 </div>
-                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Notes</label>
                   <textarea
@@ -1057,7 +1111,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   />
                 </div>
               </div>
-              
+
               <button
                 onClick={addExamination}
                 className="px-4 py-2 text-white rounded"
@@ -1065,7 +1119,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               >
                 Add Examination
               </button>
-              
+
               {/* Display added examinations */}
               {examinations.length > 0 && (
                 <div className="mt-6">
@@ -1077,11 +1131,10 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                           <div className="flex-1">
                             <div className="font-medium flex items-center gap-2">
                               {exam.examinationType}
-                              <span className={`px-2 py-1 rounded text-xs ${
-                                exam.severity === 'High' ? 'bg-red-100 text-red-700' :
-                                exam.severity === 'Moderate' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-green-100 text-green-700'
-                              }`}>
+                              <span className={`px-2 py-1 rounded text-xs ${exam.severity === 'High' ? 'bg-red-100 text-red-700' :
+                                  exam.severity === 'Moderate' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-green-100 text-green-700'
+                                }`}>
                                 {exam.severity}
                               </span>
                             </div>
@@ -1108,7 +1161,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           {activeTab === 'investigation' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold">Investigation</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Service</label>
@@ -1123,7 +1176,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     ))}
                   </select>
                 </div>
-                
+
                 <div>
                   <label className="block text-sm font-medium mb-2">Test Results</label>
                   <input
@@ -1174,7 +1227,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     ))}
                   </select>
                 </div>
-                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Notes</label>
                   <textarea
@@ -1186,7 +1239,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   />
                 </div>
               </div>
-              
+
               <button
                 onClick={addInvestigation}
                 className="px-4 py-2 text-white rounded"
@@ -1194,7 +1247,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               >
                 Add Investigation
               </button>
-              
+
               {/* Display added investigations */}
               {investigations.length > 0 && (
                 <div className="mt-6">
@@ -1231,22 +1284,77 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
           {activeTab === 'diagnosis' && (
             <div className="space-y-6">
               <h3 className="text-lg font-semibold">Diagnosis</h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Diagnosis Name</label>
-                  <select
-                    value={currentDiagnosis.diagnosis}
-                    onChange={(e) => setCurrentDiagnosis({ ...currentDiagnosis, diagnosis: e.target.value })}
+                <div className="relative">
+                  <label className="block text-sm font-medium mb-2">Diagnosis Name / ICD-10 Code</label>
+                  <input
+                    type="text"
+                    value={diagnosisSearchTerm}
+                    onChange={(e) => {
+                      setDiagnosisSearchTerm(e.target.value);
+                      setCurrentDiagnosis({ ...currentDiagnosis, diagnosis: e.target.value });
+                    }}
+                    onFocus={() => {
+                      if (diagnosisSearchTerm.length >= 2) setShowDiagnosisSearchResults(true);
+                    }}
                     className="w-full p-2 border rounded"
-                  >
-                    <option value="">Select diagnosis...</option>
-                    {DIAGNOSES_LIST.map(diagnosis => (
-                      <option key={diagnosis} value={diagnosis}>{diagnosis}</option>
-                    ))}
-                  </select>
+                    placeholder="Search e.g. 'Cholera', 'A00', 'Fever'"
+                    autoComplete="off"
+                  />
+
+                  {/* Search Results Dropdown */}
+                  {showDiagnosisSearchResults && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {icdResults.length > 0 ? (
+                        icdResults.map((result) => (
+                          <div
+                            key={result.code}
+                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                            onClick={() => {
+                              const diagnosisStr = result.description;
+                              setDiagnosisSearchTerm(diagnosisStr);
+                              setCurrentDiagnosis({
+                                ...currentDiagnosis,
+                                diagnosis: diagnosisStr,
+                                icdCode: result.code,
+                                icdDescription: result.description
+                              });
+                              setShowDiagnosisSearchResults(false);
+                            }}
+                          >
+                            <div className="font-medium text-gray-800">{result.description}</div>
+                            <div className="text-xs text-blue-600 font-semibold">ICD-10: {result.code}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="px-4 py-2 text-gray-500 text-sm">No ICD-10 codes found</div>
+                      )}
+
+                      {/* Local Fallback Options if search term matches local list */}
+                      {DIAGNOSES_LIST.filter(d => d.toLowerCase().includes(diagnosisSearchTerm.toLowerCase()) && !icdResults.some(r => r.description === d)).map(localDiag => (
+                        <div
+                          key={`local-${localDiag}`}
+                          className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                          onClick={() => {
+                            setDiagnosisSearchTerm(localDiag);
+                            setCurrentDiagnosis({
+                              ...currentDiagnosis,
+                              diagnosis: localDiag,
+                              icdCode: '',
+                              icdDescription: ''
+                            });
+                            setShowDiagnosisSearchResults(false);
+                          }}
+                        >
+                          <div className="text-gray-800">{localDiag}</div>
+                          <div className="text-xs text-gray-400">Standard Diagnosis</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                
+
                 <div className="flex items-center">
                   <label className="flex items-center">
                     <input
@@ -1286,7 +1394,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                     ))}
                   </select>
                 </div>
-                
+
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium mb-2">Treatment Given</label>
                   <textarea
@@ -1298,7 +1406,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   />
                 </div>
               </div>
-              
+
               <button
                 onClick={addDiagnosis}
                 className="px-4 py-2 text-white rounded"
@@ -1306,7 +1414,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               >
                 Add Diagnosis
               </button>
-              
+
               {/* Display added diagnoses */}
               {diagnoses.length > 0 && (
                 <div className="mt-6">
@@ -1344,7 +1452,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Add Prescription</h3>
               </div>
-              
+
               {/* Medication Details */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="text-md font-medium mb-4">Medication Details</h4>
@@ -1364,7 +1472,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                       ))}
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="block text-sm font-medium mb-2">Generic Name</label>
                     <input
@@ -1615,8 +1723,8 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                       value={currentPrescription.rate}
                       onChange={(e) => {
                         const rate = parseFloat(e.target.value) || 0;
-                        setCurrentPrescription({ 
-                          ...currentPrescription, 
+                        setCurrentPrescription({
+                          ...currentPrescription,
                           rate,
                           amount: rate // Amount equals rate initially
                         });
@@ -1694,7 +1802,7 @@ const SimpleEnhancedPatientRecord: React.FC<SimpleEnhancedPatientRecordProps> = 
                   Reset
                 </button>
               </div>
-              
+
               {/* Prescription List */}
               {prescriptions.length > 0 && (
                 <div className="mt-8">

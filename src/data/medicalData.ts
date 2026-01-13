@@ -277,7 +277,7 @@ export const MEDICINE_TYPES = [
 // Medicine Timing (M/A/N - Morning/Afternoon/Night)
 export const MEDICINE_TIMING = {
   M: 'Morning',
-  A: 'Afternoon', 
+  A: 'Afternoon',
   N: 'Night'
 };
 
@@ -342,7 +342,7 @@ export const FREQUENCY_OPTIONS = [
 export const ADMINISTRATION_ROUTES = [
   'Oral',
   'Intravenous',
-  'Intramuscular', 
+  'Intramuscular',
   'Subcutaneous',
   'Topical',
   'Inhalation',
@@ -407,6 +407,8 @@ export interface InvestigationData {
 
 export interface DiagnosisData {
   diagnosis: string;
+  icdCode?: string;
+  icdDescription?: string;
   highRisk: boolean;
   doctor: string;
   nurse: string;
@@ -461,6 +463,8 @@ export const DEFAULT_INVESTIGATION: InvestigationData = {
 
 export const DEFAULT_DIAGNOSIS: DiagnosisData = {
   diagnosis: '',
+  icdCode: '',
+  icdDescription: '',
   highRisk: false,
   doctor: '',
   nurse: '',

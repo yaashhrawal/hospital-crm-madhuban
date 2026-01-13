@@ -3,6 +3,7 @@ import { Clock, User, CheckCircle, AlertCircle, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 import HospitalService from '../services/hospitalService';
 import type { User as Doctor } from '../config/supabaseNew';
+import { announcePatient } from '../utils/voiceAnnouncement';
 
 interface QueuePatient {
   id: string;
@@ -14,6 +15,8 @@ interface QueuePatient {
   age?: number;
   gender?: string;
   doctor_id?: string;
+  assigned_doctor: string;
+  doctor?: Doctor;
 }
 
 const QueueDisplayScreen: React.FC = () => {
@@ -57,7 +60,9 @@ const QueueDisplayScreen: React.FC = () => {
           item.status === 'COMPLETED' ? 'completed' : 'waiting',
         age: item.age,
         gender: item.gender,
-        doctor_id: item.doctor_id
+        doctor_id: item.doctor_id,
+        assigned_doctor: item.doctor?.name || (item.assigned_doctor ? item.assigned_doctor : 'Unassigned'),
+        doctor: item.doctor
       }));
 
       setQueuePatients(transformedData);
@@ -80,9 +85,21 @@ const QueueDisplayScreen: React.FC = () => {
 
       await HospitalService.updateOPDQueueStatus(patientId, apiStatus);
 
+      // Find patient name for announcement
+      const patient = queuePatients.find(p => p.id === patientId);
+
       // Refresh the queue
       await fetchQueue();
       toast.success(`Patient status updated to ${status}`);
+
+      // Announce if status is 'called'
+      if (status === 'called' && patient) {
+        announcePatient({
+          patientName: `${patient.first_name} ${patient.last_name}`,
+          tokenNumber: String(patient.queue_no),
+          doctorName: patient.doctor ? `Dr. ${patient.doctor.first_name} ${patient.doctor.last_name}` : undefined
+        });
+      }
     } catch (err) {
       console.error('Error updating queue status:', err);
       toast.error('Failed to update queue status');

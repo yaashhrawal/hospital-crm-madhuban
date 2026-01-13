@@ -2685,6 +2685,21 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
 
                   {/* Action Buttons */}
                   <div className="flex flex-wrap gap-2">
+                    {/* Consult Button - Direct Access to Enhanced Record */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPatientForPrescription(patient);
+                        setShowEnhancedPatientRecord(true);
+                      }}
+                      className="bg-blue-600 text-white border border-blue-600 px-3 py-2 rounded-lg text-xs hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium shadow-sm transition-colors duration-200"
+                      title="Start Consultation (Enhanced Record)"
+                    >
+                      <div className="flex items-center space-x-1">
+                        <span>🩺 Consult</span>
+                      </div>
+                    </button>
+
                     {/* Prescription */}
                     <div className="relative">
                       <select

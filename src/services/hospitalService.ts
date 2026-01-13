@@ -1666,7 +1666,7 @@ export class HospitalService {
   static async updateOPDQueueStatus(queueId: string, status: string): Promise<any> {
     try {
       logger.log(`[OPD] Updating queue ${queueId} status to ${status}`);
-      const response = await axios.put(`${this.getBaseUrl()}/api/opd-queues/${queueId}/status`, { status }, {
+      const response = await axios.put(`${this.getBaseUrl()}/api/opd-queues/${queueId}/status`, { queue_status: status }, {
         headers: this.getHeaders()
       });
       return response.data;
@@ -1700,6 +1700,21 @@ export class HospitalService {
       logger.error('Error fetching latest vitals:', error);
       // throw error; // Component should handle null
       return null;
+    }
+  }
+
+  // ==================== ICD-10 ====================
+
+  static async searchICD10(query: string): Promise<{ code: string; description: string }[]> {
+    try {
+      const response = await axios.get(`${this.getBaseUrl()}/api/icd10`, {
+        params: { q: query },
+        headers: this.getHeaders()
+      });
+      return response.data;
+    } catch (error: any) {
+      logger.error('Error searching ICD-10 codes:', error);
+      return [];
     }
   }
 }

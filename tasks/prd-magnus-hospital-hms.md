@@ -28,23 +28,23 @@ Complete implementation of the Magnus Hospital Management System (HMS) with NABH
 **Description:** As a front desk operator, I want automatic UHID generation so that each patient has a unique hospital identifier.
 
 **Acceptance Criteria:**
-- [ ] Generate unique UHID in format: MH-YYYY-XXXXXX (e.g., MH-2026-000001)
-- [ ] Auto-increment sequence stored in database
-- [ ] Display UHID prominently on patient registration form
-- [ ] UHID visible on all patient-related screens
-- [ ] Typecheck passes
-- [ ] Verify in browser using dev-browser skill
+- [x] Generate unique UHID in format: MH-YYYY-XXXXXX (e.g., MH-2026-000001)
+- [x] Auto-increment sequence stored in database
+- [x] Display UHID prominently on patient registration form
+- [x] UHID visible on all patient-related screens
+- [x] Typecheck passes
+- [x] Verify in browser using dev-browser skill
 
 ### US-002: Aadhaar Integration
 **Description:** As a front desk operator, I want to capture Aadhaar number so that patient identity is verified.
 
 **Acceptance Criteria:**
-- [ ] Add Aadhaar number field (12 digits) to patient registration
-- [ ] Validate Aadhaar format (12 digits, Verhoeff checksum)
-- [ ] Store Aadhaar securely (masked display: XXXX-XXXX-1234)
-- [ ] Optional field - not mandatory for registration
-- [ ] Typecheck passes
-- [ ] Verify in browser using dev-browser skill
+- [x] Add Aadhaar number field (12 digits) to patient registration
+- [x] Validate Aadhaar format (12 digits, Verhoeff checksum)
+- [x] Store Aadhaar securely (masked display: XXXX-XXXX-1234)
+- [x] Optional field - not mandatory for registration
+- [x] Typecheck passes
+- [x] Verify in browser using dev-browser skill
 
 ### US-003: ABHA Number Creation
 **Description:** As a front desk operator, I want to create ABHA numbers for patients so that they can access digital health records.

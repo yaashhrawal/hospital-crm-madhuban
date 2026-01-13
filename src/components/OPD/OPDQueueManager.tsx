@@ -1,3 +1,4 @@
+// Version 2.0 - Fixed null safety issues
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { Reorder } from 'framer-motion';
@@ -9,11 +10,15 @@ import {
     CheckCircle,
     PlayCircle,
     UserPlus,
-    RefreshCw
+    RefreshCw,
+    Phone,
+    Settings
 } from 'lucide-react';
 import HospitalService from '../../services/hospitalService';
 import { logger } from '../../utils/logger';
-import type { User, OPDQueue } from '../../config/supabaseNew';
+import { announcePatient } from '../../utils/voiceAnnouncement';
+import { ElevenLabsService } from '../../services/elevenLabsService';
+import type { User } from '../../config/supabaseNew';
 import VitalsRecordingModal from './VitalsRecordingModal';
 import WalkInQueueModal from './WalkInQueueModal';
 
@@ -31,6 +36,16 @@ const OPDQueueManager: React.FC = () => {
     // Walk-in Modal State
     const [showWalkInModal, setShowWalkInModal] = useState(false);
 
+    // Call Patient Modal State
+    const [showCallModal, setShowCallModal] = useState(false);
+    const [selectedPatientForCall, setSelectedPatientForCall] = useState<{ name: string, phone: string } | null>(null);
+
+    // Settings Modal State
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [elevenLabsKey, setElevenLabsKey] = useState(localStorage.getItem('eleven_labs_api_key') || '');
+    const [voices, setVoices] = useState<any[]>([]);
+    const [selectedVoice, setSelectedVoice] = useState(localStorage.getItem('eleven_labs_voice_id') || '');
+
     useEffect(() => {
         loadDoctors();
         loadQueues();
@@ -39,6 +54,18 @@ const OPDQueueManager: React.FC = () => {
         const interval = setInterval(loadQueues, 3000);
         return () => clearInterval(interval);
     }, []);
+
+    // Fetch voices when settings modal opens
+    useEffect(() => {
+        if (showSettingsModal && elevenLabsKey) {
+            ElevenLabsService.getVoices(elevenLabsKey)
+                .then(setVoices)
+                .catch(err => {
+                    console.error(err);
+                    // Don't show toast on every open if key is invalid, just log
+                });
+        }
+    }, [showSettingsModal, elevenLabsKey]);
 
     const loadDoctors = async () => {
         try {
@@ -60,6 +87,9 @@ const OPDQueueManager: React.FC = () => {
             // Map flat backend response to nested structure expected by UI
             const mappedData = data.map((item: any) => ({
                 ...item,
+                id: item.id,
+                status: item.queue_status || 'WAITING', // Map DB queue_status to frontend status
+                token_number: item.queue_no,           // Map DB queue_no to token_number
                 patient: {
                     id: item.patient_id,
                     first_name: item.first_name,
@@ -69,9 +99,9 @@ const OPDQueueManager: React.FC = () => {
                     patient_id: item.patient_code
                 },
                 doctor: {
-                    id: item.doctor_id,
-                    first_name: item.doctor_name,
-                    last_name: item.doctor_last_name
+                    id: item.assigned_doctor, // Use assigned_doctor column for ID (it might be name or ID)
+                    first_name: item.assigned_doctor, // Use assigned_doctor for name display since we don't have separate columns
+                    last_name: ''
                 }
             }));
 
@@ -84,12 +114,26 @@ const OPDQueueManager: React.FC = () => {
         }
     };
 
-    const updateStatus = async (queueId: string, newStatus: string) => { // Defined updateStatus
+    const updateStatus = async (queueId: string, newStatus: string) => {
         try {
             await HospitalService.updateOPDQueueStatus(queueId, newStatus);
             toast.success(`Status updated to ${newStatus}`);
+
+            // Announce if status is 'IN_CONSULTATION' (Start)
+            if (newStatus === 'IN_CONSULTATION') {
+                const item = queue.find(q => q.id === queueId);
+                if (item && item.patient) {
+                    announcePatient({
+                        patientName: `${item.patient.first_name} ${item.patient.last_name}`,
+                        tokenNumber: String(item.queue_no || item.token_number || '0'),
+                        doctorName: item.doctor ? `Dr. ${item.doctor.first_name} ${item.doctor.last_name}` : undefined
+                    });
+                }
+            }
+
             loadQueues();
         } catch (error) {
+            console.error('Failed to update status', error);
             toast.error('Failed to update status');
         }
     };
@@ -127,7 +171,8 @@ const OPDQueueManager: React.FC = () => {
         setShowVitalsModal(true);
     };
 
-    const getStatusColor = (status: string) => {
+    const getStatusColor = (status: string | undefined) => {
+        if (!status) return 'bg-gray-50 border-l-gray-300 text-gray-600';
         switch (status) {
             case 'WAITING': return 'bg-yellow-50 border-l-yellow-500 text-yellow-800';
             case 'VITALS_DONE': return 'bg-blue-50 border-l-blue-500 text-blue-800';
@@ -151,11 +196,19 @@ const OPDQueueManager: React.FC = () => {
                 </div>
                 <div className="flex gap-3">
                     <button
-                        onClick={() => setShowWalkInModal(true)}
-                        className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center gap-2"
+                        onClick={() => setShowSettingsModal(true)}
+                        className="bg-gray-100 p-2 rounded-md hover:bg-gray-200 text-gray-600 transition-colors"
+                        title="Voice Settings"
                     >
-                        <UserPlus size={16} />
-                        Add Walk-in
+                        <Settings size={20} />
+                    </button>
+
+                    <button
+                        onClick={() => setShowWalkInModal(true)}
+                        className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 flex items-center gap-2 transition-colors shadow-sm"
+                    >
+                        <UserPlus size={20} />
+                        Walk-in Patient
                     </button>
                     <button
                         onClick={loadQueues}
@@ -222,7 +275,7 @@ const OPDQueueManager: React.FC = () => {
                                                         </span>
                                                     )}
                                                     <span className="text-xs text-gray-500">
-                                                        👨‍⚕️ {item.doctor?.first_name} {item.doctor?.last_name}
+                                                        👨‍⚕️ {item.doctor?.first_name || item.assigned_doctor || 'Unassigned'} {item.doctor?.last_name || ''}
                                                     </span>
                                                 </div>
                                             </div>
@@ -233,7 +286,7 @@ const OPDQueueManager: React.FC = () => {
                                                 item.status === 'IN_CONSULTATION' ? 'bg-green-100 text-green-800' :
                                                     'bg-gray-100 text-gray-800'
                                                 }`}>
-                                                {item.status.replace('_', ' ')}
+                                                {(item.status || 'WAITING').replace(/_/g, ' ')}
                                             </span>
 
                                             {/* Action Buttons */}
@@ -241,13 +294,33 @@ const OPDQueueManager: React.FC = () => {
                                                 {item.status === 'WAITING' && (
                                                     <button
                                                         onClick={() => {
-                                                            setSelectedPatientForVitals(item);
+                                                            setSelectedPatientForVitals({
+                                                                id: item.patient?.id,
+                                                                name: `${item.patient?.first_name} ${item.patient?.last_name}`,
+                                                                queueId: item.id
+                                                            });
                                                             setShowVitalsModal(true);
                                                         }}
                                                         className="bg-blue-50 text-blue-600 hover:bg-blue-100 p-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition-colors"
                                                         title="Record Vitals"
                                                     >
                                                         <Activity size={14} /> Vitals
+                                                    </button>
+                                                )}
+
+                                                {item.status === 'WAITING' && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setSelectedPatientForCall({
+                                                                name: `${item.patient?.first_name} ${item.patient?.last_name}`,
+                                                                phone: item.phone || 'No phone number'
+                                                            });
+                                                            setShowCallModal(true);
+                                                        }}
+                                                        className="bg-purple-50 text-purple-600 hover:bg-purple-100 p-1.5 rounded-md text-xs font-medium flex items-center gap-1 transition-colors"
+                                                        title="Call Patient"
+                                                    >
+                                                        <Phone size={14} /> Call
                                                     </button>
                                                 )}
 
@@ -305,14 +378,145 @@ const OPDQueueManager: React.FC = () => {
                 <VitalsRecordingModal
                     isOpen={showVitalsModal}
                     onClose={() => setShowVitalsModal(false)}
-                    patientId={selectedPatientForVitals.patient?.id || selectedPatientForVitals.id}
-                    patientName={selectedPatientForVitals.name || `${selectedPatientForVitals.patient?.first_name} ${selectedPatientForVitals.patient?.last_name}`}
-                    queueId={selectedPatientForVitals.queueId || selectedPatientForVitals.id}
+                    patientId={selectedPatientForVitals.id}
+                    patientName={selectedPatientForVitals.name}
+                    queueId={selectedPatientForVitals.queueId}
                     onSuccess={() => {
                         setShowVitalsModal(false);
                         loadQueues();
                     }}
                 />
+            )}
+
+            {/* Call Patient Modal */}
+            {showCallModal && selectedPatientForCall && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowCallModal(false)}>
+                    <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <Phone className="text-purple-600" size={24} />
+                                Call Patient
+                            </h3>
+                            <button
+                                onClick={() => setShowCallModal(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-600">Patient Name</label>
+                                <p className="text-lg font-semibold text-gray-900 mt-1">{selectedPatientForCall.name}</p>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium text-gray-600">Phone Number</label>
+                                <div className="flex items-center gap-3 mt-1">
+                                    <p className="text-2xl font-bold text-purple-600">{selectedPatientForCall.phone}</p>
+                                    {selectedPatientForCall.phone !== 'No phone number' && (
+                                        <a
+                                            href={`tel:${selectedPatientForCall.phone}`}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 flex items-center gap-2 transition-colors"
+                                        >
+                                            <Phone size={16} />
+                                            Call Now
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowCallModal(false)}
+                            className="w-full mt-6 bg-gray-100 text-gray-700 py-2 rounded-md hover:bg-gray-200 transition-colors"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+            {/* Voice Settings Modal */}
+            {showSettingsModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowSettingsModal(false)}>
+                    <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                                <Settings className="text-gray-600" size={24} />
+                                Voice Settings
+                            </h3>
+                            <button
+                                onClick={() => setShowSettingsModal(false)}
+                                className="text-gray-400 hover:text-gray-600"
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-sm font-medium text-gray-700 block mb-1">ElevenLabs API Key</label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                    Enter your API key for high-quality AI voice announcements.
+                                    Leave empty to use browser voice.
+                                </p>
+                                <input
+                                    type="password"
+                                    value={elevenLabsKey}
+                                    onChange={(e) => setElevenLabsKey(e.target.value)}
+                                    placeholder="sk_..."
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                />
+                            </div>
+
+                            {elevenLabsKey && (
+                                <div>
+                                    <label className="text-sm font-medium text-gray-700 block mb-1">Voice Selection</label>
+                                    <select
+                                        value={selectedVoice}
+                                        onChange={(e) => setSelectedVoice(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    >
+                                        <option value="">Default (Rachel)</option>
+                                        {voices.map((voice: any) => (
+                                            <option key={voice.voice_id} value={voice.voice_id}>
+                                                {voice.name} ({voice.labels?.accent || 'General'})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <p className="text-xs text-purple-600 mt-1">
+                                        Tip: To get Indian voices, go to <a href="https://elevenlabs.io/voice-library" target="_blank" rel="noopener noreferrer" className="underline font-medium">ElevenLabs Voice Library</a>, filter by "Indian", and click "Add to VoiceLab". Then refresh this page.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button
+                                onClick={() => setShowSettingsModal(false)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    localStorage.setItem('eleven_labs_api_key', elevenLabsKey);
+                                    if (selectedVoice) {
+                                        localStorage.setItem('eleven_labs_voice_id', selectedVoice);
+                                    } else {
+                                        localStorage.removeItem('eleven_labs_voice_id');
+                                    }
+                                    setShowSettingsModal(false);
+                                    toast.success('Voice settings saved');
+                                }}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors"
+                            >
+                                Save Settings
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

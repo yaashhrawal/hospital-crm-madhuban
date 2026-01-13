@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card } from '../../ui/Card';
 import { Button } from '../../ui/Button';
 import { DIAGNOSIS_OPTIONS, type DiagnosisData, DEFAULT_DIAGNOSIS } from '../../../data/medicalData';
 import DoctorService from '../../../services/doctorService';
 import NurseService from '../../../services/nurseService';
+import { HospitalService } from '../../../services/hospitalService';
 
 interface DiagnosisSectionProps {
   data: DiagnosisData[];
@@ -16,14 +17,45 @@ const DiagnosisSection: React.FC<DiagnosisSectionProps> = ({ data, onChange }) =
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [icdResults, setIcdResults] = useState<{ code: string; description: string }[]>([]);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const doctors = DoctorService.getAllDoctors();
   const nurses = NurseService.getAllNurses();
 
-  // Filter diagnoses based on search term
-  const filteredDiagnoses = DIAGNOSIS_OPTIONS.filter(diagnosis =>
-    diagnosis.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Debounced search for ICD-10
+  useEffect(() => {
+    if (searchTerm.length >= 2) {
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      // Set new timeout
+      searchTimeoutRef.current = setTimeout(async () => {
+        const results = await HospitalService.searchICD10(searchTerm);
+        if (results && results.length > 0) {
+          setIcdResults(results);
+          setShowSearchResults(true);
+        } else {
+          // Fallback to local filtering if no API results or for standard diagnoses
+          const filteredLocal = DIAGNOSIS_OPTIONS.filter(d =>
+            d.toLowerCase().includes(searchTerm.toLowerCase())
+          ).map(d => ({ code: '', description: d }));
+          setIcdResults(filteredLocal);
+        }
+      }, 300);
+    } else {
+      setIcdResults([]);
+      setShowSearchResults(false);
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchTerm]);
 
   const handleAddDiagnosis = () => {
     if (!currentDiagnosis.diagnosis) {
@@ -68,9 +100,15 @@ const DiagnosisSection: React.FC<DiagnosisSectionProps> = ({ data, onChange }) =
     setShowSearchResults(false);
   };
 
-  const handleDiagnosisSelect = (diagnosis: string) => {
-    setCurrentDiagnosis({ ...currentDiagnosis, diagnosis });
-    setSearchTerm(diagnosis);
+  const handleDiagnosisSelect = (item: { code: string; description: string }) => {
+    const diagnosisText = item.code ? `[${item.code}] ${item.description}` : item.description;
+    setCurrentDiagnosis({
+      ...currentDiagnosis,
+      diagnosis: diagnosisText,
+      icdCode: item.code || undefined,
+      icdDescription: item.description || undefined
+    });
+    setSearchTerm(diagnosisText);
     setShowSearchResults(false);
   };
 
@@ -78,61 +116,54 @@ const DiagnosisSection: React.FC<DiagnosisSectionProps> = ({ data, onChange }) =
     const value = e.target.value;
     setSearchTerm(value);
     setCurrentDiagnosis({ ...currentDiagnosis, diagnosis: value });
-    setShowSearchResults(value.length > 0);
+    // showSearchResults is controlled by useEffect now
   };
 
   return (
     <Card className="mb-6" padding="lg">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-4" style={{ color: '#0056B3' }}>
-          6. Diagnosis Section
+          6. Diagnosis Section (ICD-10 Enabled)
         </h3>
 
         <div className="space-y-4">
           {/* Searchable Diagnosis Field */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Diagnosis *
+              Diagnosis (Search ICD-10 or enter custom) *
             </label>
             <input
               type="text"
               value={searchTerm}
               onChange={handleSearchChange}
-              onFocus={() => setShowSearchResults(searchTerm.length > 0)}
+              onFocus={() => {
+                if (searchTerm.length >= 2) setShowSearchResults(true);
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Search for diagnosis or enter custom diagnosis..."
+              placeholder="e.g. 'A00' or 'Cholera'..."
             />
-            
+
             {/* Search Results Dropdown */}
-            {showSearchResults && filteredDiagnoses.length > 0 && (
+            {showSearchResults && icdResults.length > 0 && (
               <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                {filteredDiagnoses.slice(0, 30).map((diagnosis, index) => (
+                {icdResults.map((item, index) => (
                   <div
                     key={index}
                     className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm border-b border-gray-100 last:border-b-0"
-                    onClick={() => handleDiagnosisSelect(diagnosis)}
+                    onClick={() => handleDiagnosisSelect(item)}
                   >
-                    {diagnosis}
+                    {item.code ? (
+                      <div>
+                        <span className="font-bold text-blue-600 w-16 inline-block">{item.code}</span>
+                        <span>{item.description}</span>
+                      </div>
+                    ) : (
+                      <div>{item.description}</div>
+                    )}
                   </div>
                 ))}
-                {filteredDiagnoses.length > 30 && (
-                  <div className="px-3 py-2 text-sm text-gray-500 bg-gray-50">
-                    ... and {filteredDiagnoses.length - 30} more results
-                  </div>
-                )}
               </div>
             )}
-
-            {/* Show All Diagnoses Button */}
-            <div className="mt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowSearchResults(!showSearchResults)}
-              >
-                {showSearchResults ? 'Hide Options' : 'Show All Diagnoses'}
-              </Button>
-            </div>
           </div>
 
           {/* High Risk Checkbox */}
@@ -231,33 +262,36 @@ const DiagnosisSection: React.FC<DiagnosisSectionProps> = ({ data, onChange }) =
                 {data.map((diagnosis, index) => (
                   <div
                     key={index}
-                    className={`border rounded-lg p-4 ${
-                      diagnosis.highRisk 
-                        ? 'bg-red-50 border-red-200' 
+                    className={`border rounded-lg p-4 ${diagnosis.highRisk
+                        ? 'bg-red-50 border-red-200'
                         : 'bg-teal-50 border-teal-200'
-                    }`}
+                      }`}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <div className="flex items-center gap-4 mb-2 flex-wrap">
-                          <div className={`font-medium ${
-                            diagnosis.highRisk ? 'text-red-800' : 'text-teal-800'
-                          }`}>
+                          <div className={`font-medium ${diagnosis.highRisk ? 'text-red-800' : 'text-teal-800'
+                            }`}>
                             {diagnosis.diagnosis}
                           </div>
+                          {diagnosis.icdCode && (
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-mono border border-blue-200">
+                              ICD-10: {diagnosis.icdCode}
+                            </span>
+                          )}
                           {diagnosis.highRisk && (
                             <span className="bg-red-100 text-red-800 px-2 py-1 rounded text-sm font-medium border border-red-300">
                               ⚠️ High Risk
                             </span>
                           )}
                         </div>
-                        
+
                         {diagnosis.treatmentGiven && (
                           <div className="text-sm text-gray-700 mb-2 bg-white p-2 rounded border">
                             <strong>Treatment Given:</strong> {diagnosis.treatmentGiven}
                           </div>
                         )}
-                        
+
                         <div className="flex gap-4 text-sm text-gray-600">
                           {diagnosis.doctor && (
                             <span><strong>Doctor:</strong> {diagnosis.doctor}</span>

@@ -970,7 +970,7 @@ app.post('/api/admissions/:id/discharge', authenticateToken, async (req, res) =>
 app.get('/api/doctors', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM doctors WHERE is_active = true ORDER BY name'
+      'SELECT * FROM doctors WHERE is_active = true ORDER BY first_name, last_name'
     );
     res.json(result.rows);
   } catch (error) {

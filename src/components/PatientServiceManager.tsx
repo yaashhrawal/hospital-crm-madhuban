@@ -37,7 +37,7 @@ const MEDICAL_SERVICES = [
   { name: 'Thyroid Test', category: 'LAB_TEST' as const, defaultPrice: 500 },
   { name: 'Urine Test', category: 'LAB_TEST' as const, defaultPrice: 150 },
   { name: 'ECG', category: 'LAB_TEST' as const, defaultPrice: 150 },
-  
+
   // X-Ray & Imaging
   { name: 'X-Ray Chest', category: 'XRAY' as const, defaultPrice: 300 },
   { name: 'X-Ray Abdomen', category: 'XRAY' as const, defaultPrice: 350 },
@@ -45,20 +45,20 @@ const MEDICAL_SERVICES = [
   { name: 'Ultrasound Abdomen', category: 'XRAY' as const, defaultPrice: 800 },
   { name: 'CT Scan', category: 'XRAY' as const, defaultPrice: 3000 },
   { name: 'MRI', category: 'XRAY' as const, defaultPrice: 5000 },
-  
+
   // Procedures
   { name: 'Dressing', category: 'PROCEDURE' as const, defaultPrice: 150 },
   { name: 'Injection', category: 'PROCEDURE' as const, defaultPrice: 50 },
   { name: 'Nebulization', category: 'PROCEDURE' as const, defaultPrice: 200 },
   { name: 'Suture Removal', category: 'PROCEDURE' as const, defaultPrice: 200 },
   { name: 'Catheterization', category: 'PROCEDURE' as const, defaultPrice: 500 },
-  
+
   // Common Medicines
   { name: 'Paracetamol', category: 'MEDICINE' as const, defaultPrice: 10 },
   { name: 'Antibiotics', category: 'MEDICINE' as const, defaultPrice: 50 },
   { name: 'Pain Killer', category: 'MEDICINE' as const, defaultPrice: 30 },
   { name: 'IV Fluids', category: 'MEDICINE' as const, defaultPrice: 200 },
-  
+
   // Other Services
   { name: 'Ambulance Service', category: 'SERVICE' as const, defaultPrice: 500 },
   { name: 'Oxygen', category: 'SERVICE' as const, defaultPrice: 300 },
@@ -98,25 +98,25 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
     try {
       setLoading(true);
       const transactions = await HospitalService.getTransactionsByPatient(patient.id);
-      
+
       // Filter service-related transactions (exclude cancelled ones)
-      const serviceTransactions = transactions.filter(t => 
+      const serviceTransactions = transactions.filter(t =>
         ['LAB_TEST', 'XRAY', 'PROCEDURE', 'MEDICINE', 'SERVICE'].includes(t.transaction_type) &&
         t.status === 'COMPLETED' // This already excludes CANCELLED status
       );
-      
+
       setExistingTransactions(serviceTransactions);
-      
+
       // Convert transactions to service items
       const existingServices = serviceTransactions.map(t => {
         // Try to extract discount from description if it exists
         let discount = 0;
         let originalPrice = t.amount;
         // FIX: Use transaction_date if available, otherwise fall back to created_at
-        let serviceDate = t.transaction_date 
+        let serviceDate = t.transaction_date
           ? (t.transaction_date.includes('T') ? t.transaction_date.split('T')[0] : t.transaction_date)
           : (t.created_at ? t.created_at.split('T')[0] : new Date().toISOString().split('T')[0]);
-        
+
         const discountMatch = t.description?.match(/Discount:\s*(\d+)%/);
         if (discountMatch) {
           discount = parseInt(discountMatch[1]);
@@ -131,14 +131,14 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
           serviceDate = dateMatch[1];
           console.log('📅 Found service date in description:', serviceDate);
         }
-        
+
         // Extract service name (before any parentheses or brackets)
         let serviceName = t.description || t.transaction_type;
         const nameMatch = serviceName.match(/^([^(\[]+)/);
         if (nameMatch) {
           serviceName = nameMatch[1].trim();
         }
-        
+
         return {
           id: t.id,
           name: serviceName,
@@ -152,7 +152,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
           transactionId: t.id
         };
       });
-      
+
       setServices(existingServices);
     } catch (error) {
       console.error('Error loading services:', error);
@@ -181,8 +181,14 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
   };
 
   const handleAddService = async () => {
-    console.log('🚨 handleAddService called!', { newService });
-    
+    console.log('🚨 handleAddService called!', {
+      newService,
+      name: newService.name,
+      price: newService.price,
+      isNameValid: !!newService.name,
+      isPriceValid: newService.price > 0
+    });
+
     if (!newService.name || newService.price <= 0) {
       toast.error('Please enter service name and valid price');
       return;
@@ -193,7 +199,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
       const originalAmount = newService.price * newService.quantity;
       const discountAmount = originalAmount * (newService.discount / 100);
       const finalAmount = originalAmount - discountAmount;
-      
+
       // Create transaction for the service
       const finalServiceDate = newService.serviceDate || new Date().toISOString().split('T')[0];
       console.log('📅 SERVICE DATE DEBUG (PatientServiceManager):', {
@@ -205,7 +211,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
         jsDateParsed: new Date(finalServiceDate),
         jsDateISO: new Date(finalServiceDate).toISOString()
       });
-      
+
       // Build description with original amount and discount info for receipts
       let description = `${newService.name}${newService.quantity > 1 ? ` x${newService.quantity}` : ''}`;
 
@@ -234,31 +240,31 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
         discount_value: newService.discount || 0, // Store discount value
         doctor_name: newService.doctorName || null // Save the selected doctor name
       };
-      
+
       console.log('📤 SENDING TRANSACTION DATA:', {
         transaction_date: transactionData.transaction_date,
         full_data: transactionData
       });
 
       const transaction = await HospitalService.createTransaction(transactionData);
-      
+
       // Add to local state
       const serviceItem: ServiceItem = {
         ...newService,
         id: transaction.id,
         transactionId: transaction.id
       };
-      
+
       setServices([...services, serviceItem]);
-      
+
       // 🔄 CRITICAL FIX: Invalidate React Query cache to refresh dashboard
       queryClient.invalidateQueries({ queryKey: ['operations'] }); // This covers ['operations', 'revenue-expenses', ...]
       queryClient.invalidateQueries({ queryKey: ['all-patients'] });
       queryClient.invalidateQueries({ queryKey: ['beds'] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
-      
+
       console.log('💰 SERVICE ADDED - Cache invalidated for dashboard refresh');
-      
+
       // Reset form
       setNewService({
         name: '',
@@ -271,13 +277,13 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
         doctorName: patient.assigned_doctor || '' // Reset to patient's assigned doctor
       });
       setIsCustomService(false);
-      
+
       toast.success('Service added successfully');
-      
+
       // Trigger dashboard refresh event to update revenue calculations
       window.dispatchEvent(new Event('servicesUpdated'));
       window.dispatchEvent(new Event('transactionUpdated'));
-      
+
       onServicesUpdated?.();
     } catch (error) {
       console.error('Error adding service:', error);
@@ -293,7 +299,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
 
   const handleUpdateService = async () => {
     if (!editingService || editingIndex === null) return;
-    
+
     try {
       const finalUpdateDate = editingService.serviceDate || new Date().toISOString().split('T')[0];
       console.log('📅 UPDATING SERVICE DATE DEBUG (PatientServiceManager):', {
@@ -304,7 +310,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
         jsDateParsed: new Date(finalUpdateDate),
         jsDateISO: new Date(finalUpdateDate).toISOString()
       });
-      
+
       if (editingService.transactionId) {
         // Calculate final amount after discount
         const originalAmount = editingService.price * editingService.quantity;
@@ -339,32 +345,32 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
           discount_value: editingService.discount || 0, // Store discount value
           doctor_name: editingService.doctorName || null // Save the selected doctor name
         });
-        
+
         console.log('🔥 UPDATED TRANSACTION_DATE:', editingService.serviceDate);
       }
-      
+
       // Update local state
       const updatedServices = [...services];
       updatedServices[editingIndex] = editingService;
       setServices(updatedServices);
-      
+
       console.log('✅ Service updated with new date:', editingService.serviceDate);
-      
+
       // Reset edit state
       setEditingIndex(null);
       setEditingService(null);
-      
+
       // 🔄 CRITICAL: Invalidate React Query cache to refresh operations ledger
       queryClient.invalidateQueries({ queryKey: ['operations'] });
       queryClient.invalidateQueries({ queryKey: ['all-patients'] });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      
+
       toast.success('Service updated successfully');
-      
+
       // Trigger dashboard refresh event to update revenue calculations
       window.dispatchEvent(new Event('servicesUpdated'));
       window.dispatchEvent(new Event('transactionUpdated'));
-      
+
       onServicesUpdated?.();
     } catch (error) {
       console.error('Error updating service:', error);
@@ -379,20 +385,20 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
 
   const handleRemoveService = async (index: number) => {
     const serviceToRemove = services[index];
-    
+
     try {
       // If the service has a transaction ID, delete it from the database
       if (serviceToRemove.transactionId) {
         await HospitalService.deleteTransaction(serviceToRemove.transactionId);
       }
-      
+
       // Remove from local state by index
       const updatedServices = services.filter((_, i) => i !== index);
       setServices(updatedServices);
-      
+
       toast.success('Service removed permanently');
       onServicesUpdated?.();
-      
+
       // Trigger dashboard refresh
       window.dispatchEvent(new Event('transactionUpdated'));
     } catch (error) {
@@ -432,7 +438,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
           {/* Add Service Section */}
           <div className="p-4 bg-gray-50 border-b">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">Add New Service</h3>
-            
+
             {/* Category Selection */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
               {(['LAB_TEST', 'XRAY', 'PROCEDURE', 'MEDICINE', 'SERVICE'] as const).map(category => (
@@ -442,11 +448,10 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                     setSelectedCategory(category);
                     setNewService({ ...newService, category });
                   }}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
-                    selectedCategory === category
+                  className={`px-3 py-2 rounded text-sm font-medium transition-colors ${selectedCategory === category
                       ? 'bg-indigo-600 text-white'
                       : 'bg-white text-gray-700 border hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   {category.replace('_', ' ')}
                 </button>
@@ -623,7 +628,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                       const originalAmount = newService.price * newService.quantity;
                       const discountAmount = originalAmount * (newService.discount / 100);
                       const finalAmount = originalAmount - discountAmount;
-                      
+
                       return (
                         <>
                           <div>Amount: ₹{originalAmount.toLocaleString()}</div>
@@ -652,7 +657,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
           {/* Services List */}
           <div className="flex-1 overflow-auto p-4">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">Current Services</h3>
-            
+
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
@@ -678,7 +683,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                             <input
                               type="text"
                               value={editingService?.name || ''}
-                              onChange={(e) => setEditingService(prev => prev ? {...prev, name: e.target.value} : null)}
+                              onChange={(e) => setEditingService(prev => prev ? { ...prev, name: e.target.value } : null)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             />
                           </div>
@@ -689,7 +694,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                                 <input
                                   type="number"
                                   value={editingService?.price || ''}
-                                  onChange={(e) => setEditingService(prev => prev ? {...prev, price: Number(e.target.value) || 0} : null)}
+                                  onChange={(e) => setEditingService(prev => prev ? { ...prev, price: Number(e.target.value) || 0 } : null)}
                                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                   min="0"
                                 />
@@ -699,7 +704,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                                 <input
                                   type="number"
                                   value={editingService?.quantity || 1}
-                                  onChange={(e) => setEditingService(prev => prev ? {...prev, quantity: Math.max(1, Number(e.target.value) || 1)} : null)}
+                                  onChange={(e) => setEditingService(prev => prev ? { ...prev, quantity: Math.max(1, Number(e.target.value) || 1) } : null)}
                                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                                   min="1"
                                 />
@@ -711,7 +716,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                             <input
                               type="number"
                               value={editingService?.discount || ''}
-                              onChange={(e) => setEditingService(prev => prev ? {...prev, discount: Math.max(0, Math.min(100, Number(e.target.value) || 0))} : null)}
+                              onChange={(e) => setEditingService(prev => prev ? { ...prev, discount: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } : null)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                               min="0"
                               max="100"
@@ -722,7 +727,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                             <input
                               type="date"
                               value={editingService?.serviceDate || ''}
-                              onChange={(e) => setEditingService(prev => prev ? {...prev, serviceDate: e.target.value} : null)}
+                              onChange={(e) => setEditingService(prev => prev ? { ...prev, serviceDate: e.target.value } : null)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                               max={new Date().toISOString().split('T')[0]}
                             />
@@ -733,7 +738,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                             <label className="block text-xs font-medium text-gray-700 mb-1">Payment Mode</label>
                             <select
                               value={editingService?.paymentMode || 'CASH'}
-                              onChange={(e) => setEditingService(prev => prev ? {...prev, paymentMode: e.target.value as ServiceItem['paymentMode']} : null)}
+                              onChange={(e) => setEditingService(prev => prev ? { ...prev, paymentMode: e.target.value as ServiceItem['paymentMode'] } : null)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             >
                               <option value="CASH">Cash</option>
@@ -748,7 +753,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                             <label className="block text-xs font-medium text-gray-700 mb-1">👨‍⚕️ Doctor</label>
                             <select
                               value={editingService?.doctorName || ''}
-                              onChange={(e) => setEditingService(prev => prev ? {...prev, doctorName: e.target.value} : null)}
+                              onChange={(e) => setEditingService(prev => prev ? { ...prev, doctorName: e.target.value } : null)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                             >
                               <option value="">Select Doctor</option>
@@ -764,7 +769,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                             <input
                               type="text"
                               value={editingService?.notes || ''}
-                              onChange={(e) => setEditingService(prev => prev ? {...prev, notes: e.target.value} : null)}
+                              onChange={(e) => setEditingService(prev => prev ? { ...prev, notes: e.target.value } : null)}
                               className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
                               placeholder="Optional notes"
                             />
@@ -821,7 +826,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
                               const originalAmount = service.price * service.quantity;
                               const discountAmount = originalAmount * (service.discount / 100);
                               const finalAmount = originalAmount - discountAmount;
-                              
+
                               return (
                                 <>
                                   ₹{service.price} × {service.quantity} = ₹{originalAmount.toLocaleString()}

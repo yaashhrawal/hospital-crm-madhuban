@@ -966,9 +966,9 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
       RETURNING *`,
       [
         patient_id,
-        transaction_type ? transaction_type.toLowerCase() : 'consultation',
+        transaction_type || 'CONSULTATION',
         amount || 0,
-        payment_mode ? payment_mode.toLowerCase() : 'cash',
+        payment_mode || 'cash',
         doctor_id,
         doctor_name || 'Unassigned',
         department || 'General',

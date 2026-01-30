@@ -15,8 +15,9 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Serve static files from the dist directory
-app.use(express.static(path.join(__dirname, '../dist')));
+// Serve static files from the dist directory (only for local development)
+// Commented out for Vercel deployment where frontend is separate
+// app.use(express.static(path.join(__dirname, '../dist')));
 
 // Azure PostgreSQL connection
 const pool = new Pool({

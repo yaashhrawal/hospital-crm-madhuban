@@ -1127,10 +1127,40 @@ app.post('/api/admissions/:id/discharge', authenticateToken, async (req, res) =>
 // Get all doctors
 app.get('/api/doctors', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM doctors WHERE is_active = true ORDER BY first_name, last_name'
-    );
-    res.json(result.rows);
+    // Return hardcoded doctors (matching dataService.ts)
+    const hardcodedDoctors = [
+      {
+        id: 'hemant-khajja',
+        name: 'DR. HEMANT KHAJJA',
+        first_name: 'HEMANT',
+        last_name: 'KHAJJA',
+        department: 'ORTHOPAEDIC',
+        specialization: 'Orthopaedic Surgeon',
+        fee: 800,
+        is_active: true
+      },
+      {
+        id: 'lalita-suwalka',
+        name: 'DR. LALITA SUWALKA',
+        first_name: 'LALITA',
+        last_name: 'SUWALKA',
+        department: 'DIETICIAN',
+        specialization: 'Clinical Dietician',
+        fee: 500,
+        is_active: true
+      },
+      {
+        id: 'poonam-jain-physiotherapy',
+        name: 'DR. POONAM JAIN',
+        first_name: 'POONAM',
+        last_name: 'JAIN',
+        department: 'PHYSIOTHERAPY',
+        specialization: 'Physiotherapist',
+        fee: 600,
+        is_active: true
+      }
+    ];
+    res.json(hardcodedDoctors);
   } catch (error) {
     console.error('Error fetching doctors:', error);
     res.status(500).json({ error: 'Server error' });
@@ -2067,6 +2097,59 @@ app.get('/api/icd10', async (req, res) => {
   } catch (error) {
     console.error('Error searching ICD-10 codes:', error);
     res.status(500).json({ error: 'Failed to search ICD-10 codes' });
+  }
+});
+
+// ==================== DAILY EXPENSES ROUTES ====================
+
+// Get daily expenses by date
+app.get('/api/daily_expenses', authenticateToken, async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({ error: 'Date parameter is required' });
+    }
+
+    // Return empty array for now (can be implemented later with actual table)
+    res.json([]);
+  } catch (error) {
+    console.error('Error fetching daily expenses:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Create daily expense
+app.post('/api/daily_expenses', authenticateToken, async (req, res) => {
+  try {
+    // Return success for now (can be implemented later with actual table)
+    res.json({ message: 'Expense tracking coming soon' });
+  } catch (error) {
+    console.error('Error creating expense:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// ==================== SAAS ORGANIZATION ROUTES ====================
+
+// Get organization details
+app.get('/api/saas/organizations/:orgId', authenticateToken, async (req, res) => {
+  try {
+    const { orgId } = req.params;
+
+    // Return basic organization info
+    const organization = {
+      id: orgId,
+      name: 'VALANT Hospital',
+      status: 'active',
+      subscription: 'premium',
+      created_at: new Date().toISOString()
+    };
+
+    res.json(organization);
+  } catch (error) {
+    console.error('Error fetching organization:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 

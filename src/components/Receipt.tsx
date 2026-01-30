@@ -590,9 +590,9 @@ const Receipt: React.FC<ReceiptProps> = ({ patientId, onClose }) => {
               <tbody>
                 {services.length > 0 ? services.map((service) => {
                   const discountDisplay = service.discountPercentage && service.discountPercentage > 0
-                    ? `${service.discountPercentage.toFixed(0)}% (₹${service.discountAmount?.toFixed(2) || '0.00'})`
+                    ? `${(service.discountPercentage || 0).toFixed(0)}% (₹${service.discountAmount?.toFixed(2) || '0.00'})`
                     : (service.discountAmount && service.discountAmount > 0)
-                      ? `₹${service.discountAmount.toFixed(2)}`
+                      ? `₹${(service.discountAmount || 0).toFixed(2)}`
                       : '-';
 
                   return (

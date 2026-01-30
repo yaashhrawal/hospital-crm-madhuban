@@ -65,185 +65,189 @@ const authenticateToken = async (req, res, next) => {
       // For now, we assume this is the intended behavior for debugging
       const adminResult = await pool.query("SELECT * FROM users WHERE email = 'admin@hospital.com'");
       if (adminResult.rows.length > 0) {
-        req.user = adminResult.rows[0];
-        console.log('🔓 [DEV] Auto-logged in as:', req.user.email);
-        return next();
-      }
-    } catch (err) {
-      console.error('Auto-login failed:', err.message);
-    }
-    return res.sendStatus(401);
-  }
+        if (token == null) {
+          // DEVELOPMENT BYPASS: No token provided? Default to Admin!
+          console.log('🔓 [DEV] No token provided - using HARDCODED Admin bypass');
+          req.user = {
+            id: '00000000-0000-0000-0000-000000000000',
+            email: 'admin@hospital.com',
+            role: 'ADMIN',
+            first_name: 'Dev',
+            last_name: 'Admin',
+            is_active: true
+          };
+          return next();
+        }
 
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) {
-      console.warn('⚠️ [Auth] Token verification failed:', err.message);
+        jwt.verify(token, JWT_SECRET, (err, user) => {
+          if (err) {
+            console.warn('⚠️ [Auth] Token verification failed:', err.message);
 
-      // DEVELOPMENT BYPASS FALLBACK: 
-      // Force auto-login with hardcoded admin user (no DB query required)
-      req.user = {
-        id: '00000000-0000-0000-0000-000000000000',
-        email: 'admin@hospital.com',
-        role: 'ADMIN',
-        first_name: 'Dev',
-        last_name: 'Admin',
-        is_active: true
+            // DEVELOPMENT BYPASS FALLBACK: 
+            // Force auto-login with hardcoded admin user (no DB query required)
+            req.user = {
+              id: '00000000-0000-0000-0000-000000000000',
+              email: 'admin@hospital.com',
+              role: 'ADMIN',
+              first_name: 'Dev',
+              last_name: 'Admin',
+              is_active: true
+            };
+            console.log('🔓 [DEV] Token failed - using HARDCODED Admin bypass');
+            return next();
+          }
+          req.user = user;
+          next();
+        });
       };
-      console.log('🔓 [DEV] Token failed - using HARDCODED Admin bypass');
-      return next();
-    }
-    req.user = user;
-    next();
-  });
-};
 
-// ==================== HEALTH & INFO ROUTES ====================
+      // ==================== HEALTH & INFO ROUTES ====================
 
-// Health check endpoint
-app.get('/api/health', async (req, res) => {
-  try {
-    // Test database connection
-    const result = await pool.query('SELECT NOW()');
-    res.json({
-      status: 'healthy',
-      database: 'connected',
-      timestamp: result.rows[0].now
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'unhealthy',
-      database: 'disconnected',
-      error: error.message
-    });
-  }
-});
+      // Health check endpoint
+      app.get('/api/health', async (req, res) => {
+        try {
+          // Test database connection
+          const result = await pool.query('SELECT NOW()');
+          res.json({
+            status: 'healthy',
+            database: 'connected',
+            timestamp: result.rows[0].now
+          });
+        } catch (error) {
+          res.status(500).json({
+            status: 'unhealthy',
+            database: 'disconnected',
+            error: error.message
+          });
+        }
+      });
 
-// Root API endpoint
-app.get('/api', (req, res) => {
-  res.json({
-    message: 'Hospital CRM API',
-    version: '1.0.0',
-    status: 'running'
-  });
-});
+      // Root API endpoint
+      app.get('/api', (req, res) => {
+        res.json({
+          message: 'Hospital CRM API',
+          version: '1.0.0',
+          status: 'running'
+        });
+      });
 
-// Root path handler (to avoid "Not Found" on home page)
-app.get('/', (req, res) => {
-  res.json({
-    message: 'Hospital CRM Backend is Running',
-    endpoints: {
-      health: '/api/health',
-      api_info: '/api'
-    }
-  });
-});
+      // Root path handler (to avoid "Not Found" on home page)
+      app.get('/', (req, res) => {
+        res.json({
+          message: 'Hospital CRM Backend is Running',
+          endpoints: {
+            health: '/api/health',
+            api_info: '/api'
+          }
+        });
+      });
 
-// ==================== AUTH ROUTES ====================
+      // ==================== AUTH ROUTES ====================
 
-// Login
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
+      // Login
+      app.post('/api/auth/login', async (req, res) => {
+        try {
+          const { email, password } = req.body;
 
-    const result = await pool.query(
-      'SELECT * FROM users WHERE email = $1 AND is_active = true',
-      [email]
-    );
+          const result = await pool.query(
+            'SELECT * FROM users WHERE email = $1 AND is_active = true',
+            [email]
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+          }
 
-    const user = result.rows[0];
+          const user = result.rows[0];
 
-    // Check if password is stored as plain text or bcrypt hash
-    const passwordField = user.password || user.password_hash;
+          // Check if password is stored as plain text or bcrypt hash
+          const passwordField = user.password || user.password_hash;
 
-    let validPassword = false;
+          let validPassword = false;
 
-    // If password exists in database
-    if (passwordField) {
-      // First try bcrypt comparison (for hashed passwords)
-      try {
-        validPassword = await bcrypt.compare(password, passwordField);
-      } catch (err) {
-        // If bcrypt fails, might be plain text - try direct comparison
-        validPassword = (password === passwordField);
-      }
-    }
+          // If password exists in database
+          if (passwordField) {
+            // First try bcrypt comparison (for hashed passwords)
+            try {
+              validPassword = await bcrypt.compare(password, passwordField);
+            } catch (err) {
+              // If bcrypt fails, might be plain text - try direct comparison
+              validPassword = (password === passwordField);
+            }
+          }
 
-    // Also accept temp password for admin users
-    if (!validPassword &&
-      (email === 'admin@indic.com' || email === 'admin@valant.com' || email === 'admin@hospital.com') &&
-      password === 'admin123') {
-      validPassword = true;
-    }
+          // Also accept temp password for admin users
+          if (!validPassword &&
+            (email === 'admin@indic.com' || email === 'admin@valant.com' || email === 'admin@hospital.com') &&
+            password === 'admin123') {
+            validPassword = true;
+          }
 
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+          if (!validPassword) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+          }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
+          const token = jwt.sign(
+            { id: user.id, email: user.email, role: user.role },
+            JWT_SECRET,
+            { expiresIn: '24h' }
+          );
 
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        role: user.role
-      }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          res.json({
+            token,
+            user: {
+              id: user.id,
+              email: user.email,
+              first_name: user.first_name,
+              last_name: user.last_name,
+              role: user.role
+            }
+          });
+        } catch (error) {
+          console.error('Login error:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// Register new user
-app.post('/api/auth/register', authenticateToken, async (req, res) => {
-  try {
-    // Only admins can create new users
-    if (req.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+      // Register new user
+      app.post('/api/auth/register', authenticateToken, async (req, res) => {
+        try {
+          // Only admins can create new users
+          if (req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Unauthorized' });
+          }
 
-    const { email, password, first_name, last_name, role } = req.body;
+          const { email, password, first_name, last_name, role } = req.body;
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(password, salt);
+          // Hash password
+          const salt = await bcrypt.genSalt(10);
+          const password_hash = await bcrypt.hash(password, salt);
 
-    const result = await pool.query(
-      `INSERT INTO users (email, password_hash, first_name, last_name, role) 
+          const result = await pool.query(
+            `INSERT INTO users (email, password_hash, first_name, last_name, role) 
        VALUES ($1, $2, $3, $4, $5) 
        RETURNING id, email, first_name, last_name, role`,
-      [email, password_hash, first_name, last_name, role]
-    );
+            [email, password_hash, first_name, last_name, role]
+          );
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Registration error:', error);
-    if (error.code === '23505') {
-      res.status(400).json({ error: 'Email already exists' });
-    } else {
-      res.status(500).json({ error: 'Server error' });
-    }
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Registration error:', error);
+          if (error.code === '23505') {
+            res.status(400).json({ error: 'Email already exists' });
+          } else {
+            res.status(500).json({ error: 'Server error' });
+          }
+        }
+      });
 
-// ==================== PATIENT ROUTES ====================
+      // ==================== PATIENT ROUTES ====================
 
-// Get all patients
-app.get('/api/patients', authenticateToken, async (req, res) => {
-  try {
-    // Fetch patients with transactions and admissions using subqueries
-    const result = await pool.query(`
+      // Get all patients
+      app.get('/api/patients', authenticateToken, async (req, res) => {
+        try {
+          // Fetch patients with transactions and admissions using subqueries
+          const result = await pool.query(`
       SELECT
         p.*,
         COALESCE(
@@ -262,23 +266,23 @@ app.get('/api/patients', authenticateToken, async (req, res) => {
       WHERE (p.is_active = true OR p.is_active IS NULL)
       ORDER BY p.created_at DESC
     `);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching patients:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching patients:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Get patients by date range
-app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
-  try {
-    const { start_date, end_date } = req.query;
+      // Get patients by date range
+      app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
+        try {
+          const { start_date, end_date } = req.query;
 
-    if (!start_date || !end_date) {
-      return res.status(400).json({ error: 'Start date and end date are required' });
-    }
+          if (!start_date || !end_date) {
+            return res.status(400).json({ error: 'Start date and end date are required' });
+          }
 
-    const result = await pool.query(`
+          const result = await pool.query(`
       SELECT
         p.*,
         COALESCE(
@@ -299,20 +303,20 @@ app.get('/api/patients/by-date-range', authenticateToken, async (req, res) => {
       ORDER BY p.date_of_entry DESC
     `, [start_date, end_date]);
 
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching patients by date range:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching patients by date range:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Get patients by exact date
-app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
-  try {
-    const { date } = req.params;
-    const { limit } = req.query;
+      // Get patients by exact date
+      app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
+        try {
+          const { date } = req.params;
+          const { limit } = req.query;
 
-    let query = `
+          let query = `
       SELECT
         p.*,
         COALESCE(
@@ -333,122 +337,122 @@ app.get('/api/patients/by-date/:date', authenticateToken, async (req, res) => {
       ORDER BY p.date_of_entry DESC
     `;
 
-    const params = [date];
+          const params = [date];
 
-    if (limit) {
-      query += ` LIMIT $2`;
-      params.push(limit);
-    }
+          if (limit) {
+            query += ` LIMIT $2`;
+            params.push(limit);
+          }
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching patients by date:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching patients by date:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Get single patient
-app.get('/api/patients/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query(
-      'SELECT * FROM patients WHERE id = $1',
-      [id]
-    );
+      // Get single patient
+      app.get('/api/patients/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const result = await pool.query(
+            'SELECT * FROM patients WHERE id = $1',
+            [id]
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Patient not found' });
+          }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error fetching patient:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error fetching patient:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// Create new patient
-app.post('/api/patients', authenticateToken, async (req, res) => {
-  try {
-    const {
-      first_name,
-      last_name,
-      age,
-      gender,
-      phone,
-      email,
-      address,
-      emergency_contact_name,
-      emergency_contact_phone,
-      medical_history,
-      allergies,
-      current_medications,
-      blood_group,
-      notes,
-      date_of_entry,
-      photo_url,
-      patient_tag,
-      prefix,
-      date_of_birth,
-      assigned_doctor,
-      assigned_department,
-      has_reference,
-      reference_details,
-      abha_id,
-      aadhaar_number,
-      has_pending_appointment
-    } = req.body;
+      // Create new patient
+      app.post('/api/patients', authenticateToken, async (req, res) => {
+        try {
+          const {
+            first_name,
+            last_name,
+            age,
+            gender,
+            phone,
+            email,
+            address,
+            emergency_contact_name,
+            emergency_contact_phone,
+            medical_history,
+            allergies,
+            current_medications,
+            blood_group,
+            notes,
+            date_of_entry,
+            photo_url,
+            patient_tag,
+            prefix,
+            date_of_birth,
+            assigned_doctor,
+            assigned_department,
+            has_reference,
+            reference_details,
+            abha_id,
+            aadhaar_number,
+            has_pending_appointment
+          } = req.body;
 
-    // Auto-generate patient_id in format M000001, M000002, etc.
-    let generatedPatientId;
+          // Auto-generate patient_id in format M000001, M000002, etc.
+          let generatedPatientId;
 
-    // Get the last patient_id from the database
-    const lastPatientResult = await pool.query(
-      `SELECT patient_id FROM patients
+          // Get the last patient_id from the database
+          const lastPatientResult = await pool.query(
+            `SELECT patient_id FROM patients
        WHERE patient_id LIKE 'M%'
        ORDER BY patient_id DESC
        LIMIT 1`
-    );
+          );
 
-    if (lastPatientResult.rows.length > 0 && lastPatientResult.rows[0].patient_id) {
-      // Extract the numeric part from the last patient_id (e.g., M000010 -> 10)
-      const lastId = lastPatientResult.rows[0].patient_id;
-      const numericPart = parseInt(lastId.substring(1)) || 0;
-      const nextNumber = numericPart + 1;
+          if (lastPatientResult.rows.length > 0 && lastPatientResult.rows[0].patient_id) {
+            // Extract the numeric part from the last patient_id (e.g., M000010 -> 10)
+            const lastId = lastPatientResult.rows[0].patient_id;
+            const numericPart = parseInt(lastId.substring(1)) || 0;
+            const nextNumber = numericPart + 1;
 
-      // Format as M + 6-digit zero-padded number
-      generatedPatientId = 'M' + nextNumber.toString().padStart(6, '0');
-      console.log(`📝 Last patient ID: ${lastId}, Generated new ID: ${generatedPatientId}`);
-    } else {
-      // No patients yet, start with M000001
-      generatedPatientId = 'M000001';
-      console.log(`📝 First patient, Generated ID: ${generatedPatientId}`);
-    }
+            // Format as M + 6-digit zero-padded number
+            generatedPatientId = 'M' + nextNumber.toString().padStart(6, '0');
+            console.log(`📝 Last patient ID: ${lastId}, Generated new ID: ${generatedPatientId}`);
+          } else {
+            // No patients yet, start with M000001
+            generatedPatientId = 'M000001';
+            console.log(`📝 First patient, Generated ID: ${generatedPatientId}`);
+          }
 
-    // Auto-generate queue number (resets daily)
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+          // Auto-generate queue number (resets daily)
+          const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
 
-    // Get the last queue number for today
-    const lastQueueResult = await pool.query(
-      `SELECT queue_no FROM patients
+          // Get the last queue number for today
+          const lastQueueResult = await pool.query(
+            `SELECT queue_no FROM patients
        WHERE queue_date = $1
        ORDER BY queue_no DESC
        LIMIT 1`,
-      [today]
-    );
+            [today]
+          );
 
-    let queueNumber;
-    if (lastQueueResult.rows.length > 0 && lastQueueResult.rows[0].queue_no) {
-      queueNumber = lastQueueResult.rows[0].queue_no + 1;
-      console.log(`🎫 Last queue number for today: ${lastQueueResult.rows[0].queue_no}, Generated new queue: ${queueNumber}`);
-    } else {
-      queueNumber = 1;
-      console.log(`🎫 First patient for today, Generated queue: ${queueNumber}`);
-    }
+          let queueNumber;
+          if (lastQueueResult.rows.length > 0 && lastQueueResult.rows[0].queue_no) {
+            queueNumber = lastQueueResult.rows[0].queue_no + 1;
+            console.log(`🎫 Last queue number for today: ${lastQueueResult.rows[0].queue_no}, Generated new queue: ${queueNumber}`);
+          } else {
+            queueNumber = 1;
+            console.log(`🎫 First patient for today, Generated queue: ${queueNumber}`);
+          }
 
-    const result = await pool.query(
-      `INSERT INTO patients (
+          const result = await pool.query(
+            `INSERT INTO patients (
         id, patient_id, prefix, first_name, last_name, age, gender, phone, email, address,
         emergency_contact_name, emergency_contact_phone, medical_history,
         allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
@@ -457,115 +461,115 @@ app.post('/api/patients', authenticateToken, async (req, res) => {
         queue_no, queue_status, queue_date, has_pending_appointment
       ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
       RETURNING *`,
-      [
-        generatedPatientId, prefix || 'Mr', first_name, last_name, age, gender, phone, email, address,
-        emergency_contact_name, emergency_contact_phone, medical_history,
-        allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
-        photo_url, patient_tag, abha_id, aadhaar_number, assigned_doctor, assigned_department,
-        has_reference, reference_details, req.user.id, true,
-        queueNumber, 'waiting', today, has_pending_appointment || false
-      ]
-    );
+            [
+              generatedPatientId, prefix || 'Mr', first_name, last_name, age, gender, phone, email, address,
+              emergency_contact_name, emergency_contact_phone, medical_history,
+              allergies, current_medications, blood_group, notes, date_of_entry, date_of_birth,
+              photo_url, patient_tag, abha_id, aadhaar_number, assigned_doctor, assigned_department,
+              has_reference, reference_details, req.user.id, true,
+              queueNumber, 'waiting', today, has_pending_appointment || false
+            ]
+          );
 
-    console.log(`✅ Patient created with ID: ${generatedPatientId}`);
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error creating patient:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          console.log(`✅ Patient created with ID: ${generatedPatientId}`);
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error creating patient:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Update patient
-app.put('/api/patients/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
+      // Update patient
+      app.put('/api/patients/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const updates = req.body;
 
-    // Build dynamic update query
-    const setClause = Object.keys(updates)
-      .map((key, index) => `${key} = $${index + 2}`)
-      .join(', ');
+          // Build dynamic update query
+          const setClause = Object.keys(updates)
+            .map((key, index) => `${key} = $${index + 2}`)
+            .join(', ');
 
-    const values = [id, ...Object.values(updates)];
+          const values = [id, ...Object.values(updates)];
 
-    const result = await pool.query(
-      `UPDATE patients SET ${setClause} WHERE id = $1 RETURNING *`,
-      values
-    );
+          const result = await pool.query(
+            `UPDATE patients SET ${setClause} WHERE id = $1 RETURNING *`,
+            values
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Patient not found' });
+          }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating patient:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error updating patient:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// Delete patient
-app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log('🗑️ Deleting patient with ID:', id);
+      // Delete patient
+      app.delete('/api/patients/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          console.log('🗑️ Deleting patient with ID:', id);
 
-    // First, delete related records to avoid foreign key constraints
-    // Delete patient transactions
-    await pool.query('DELETE FROM patient_transactions WHERE patient_id = $1', [id]);
-    console.log('✅ Deleted patient transactions');
+          // First, delete related records to avoid foreign key constraints
+          // Delete patient transactions
+          await pool.query('DELETE FROM patient_transactions WHERE patient_id = $1', [id]);
+          console.log('✅ Deleted patient transactions');
 
-    // Delete patient admissions
-    await pool.query('DELETE FROM patient_admissions WHERE patient_id = $1', [id]);
-    console.log('✅ Deleted patient admissions');
+          // Delete patient admissions
+          await pool.query('DELETE FROM patient_admissions WHERE patient_id = $1', [id]);
+          console.log('✅ Deleted patient admissions');
 
-    // Delete patient refunds
-    await pool.query('DELETE FROM patient_refunds WHERE patient_id = $1', [id]);
-    console.log('✅ Deleted patient refunds');
+          // Delete patient refunds
+          await pool.query('DELETE FROM patient_refunds WHERE patient_id = $1', [id]);
+          console.log('✅ Deleted patient refunds');
 
-    // Delete complete patient record related data if exists
-    try {
-      await pool.query('DELETE FROM patient_high_risk WHERE patient_id = $1', [id]);
-      await pool.query('DELETE FROM patient_chief_complaints WHERE patient_id = $1', [id]);
-      await pool.query('DELETE FROM patient_examination WHERE patient_id = $1', [id]);
-      await pool.query('DELETE FROM patient_investigation WHERE patient_id = $1', [id]);
-      await pool.query('DELETE FROM patient_diagnosis WHERE patient_id = $1', [id]);
-      await pool.query('DELETE FROM patient_enhanced_prescription WHERE patient_id = $1', [id]);
-      await pool.query('DELETE FROM patient_record_summary WHERE patient_id = $1', [id]);
-      console.log('✅ Deleted patient record data');
-    } catch (err) {
-      // Tables might not exist, continue
-      console.log('⚠️ Some patient record tables not found, continuing...');
-    }
+          // Delete complete patient record related data if exists
+          try {
+            await pool.query('DELETE FROM patient_high_risk WHERE patient_id = $1', [id]);
+            await pool.query('DELETE FROM patient_chief_complaints WHERE patient_id = $1', [id]);
+            await pool.query('DELETE FROM patient_examination WHERE patient_id = $1', [id]);
+            await pool.query('DELETE FROM patient_investigation WHERE patient_id = $1', [id]);
+            await pool.query('DELETE FROM patient_diagnosis WHERE patient_id = $1', [id]);
+            await pool.query('DELETE FROM patient_enhanced_prescription WHERE patient_id = $1', [id]);
+            await pool.query('DELETE FROM patient_record_summary WHERE patient_id = $1', [id]);
+            console.log('✅ Deleted patient record data');
+          } catch (err) {
+            // Tables might not exist, continue
+            console.log('⚠️ Some patient record tables not found, continuing...');
+          }
 
-    // Finally, delete the patient
-    const result = await pool.query('DELETE FROM patients WHERE id = $1 RETURNING id', [id]);
+          // Finally, delete the patient
+          const result = await pool.query('DELETE FROM patients WHERE id = $1 RETURNING id', [id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Patient not found' });
+          }
 
-    console.log('✅ Patient deleted successfully');
-    res.json({ message: 'Patient deleted successfully', id: result.rows[0].id });
-  } catch (error) {
-    console.error('❌ Error deleting patient:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          console.log('✅ Patient deleted successfully');
+          res.json({ message: 'Patient deleted successfully', id: result.rows[0].id });
+        } catch (error) {
+          console.error('❌ Error deleting patient:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Queue Management Endpoints
+      // Queue Management Endpoints
 
-// Get OPD Queues (with filters)
-app.get('/api/opd-queues', authenticateToken, async (req, res) => {
-  try {
-    const { date, status, doctor_id } = req.query;
+      // Get OPD Queues (with filters)
+      app.get('/api/opd-queues', authenticateToken, async (req, res) => {
+        try {
+          const { date, status, doctor_id } = req.query;
 
-    // Default to today if no date provided
-    const queryDate = date || new Date().toISOString().split('T')[0];
-    const params = [queryDate];
-    let paramIndex = 2;
+          // Default to today if no date provided
+          const queryDate = date || new Date().toISOString().split('T')[0];
+          const params = [queryDate];
+          let paramIndex = 2;
 
-    let query = `
+          let query = `
       SELECT
         id,
         patient_id,
@@ -584,112 +588,112 @@ app.get('/api/opd-queues', authenticateToken, async (req, res) => {
       WHERE queue_date = $1
     `;
 
-    if (status) {
-      query += ` AND queue_status = $${paramIndex}`;
-      params.push(status);
-      paramIndex++;
-    }
+          if (status) {
+            query += ` AND queue_status = $${paramIndex}`;
+            params.push(status);
+            paramIndex++;
+          }
 
-    if (doctor_id) {
-      // If sorting by doctor, we might need to join or just filter by assigned_doctor name/id combo. 
-      // For now, let's assume filtering isn't strictly enforced on ID vs Name mixed types, 
-      // or we just don't filter if it's complex. 
-      // But let's try to match assigned_doctor column.
-      // query += ` AND assigned_doctor = $${paramIndex}`;
-      // params.push(doctor_id);
-      // paramIndex++;
-    }
+          if (doctor_id) {
+            // If sorting by doctor, we might need to join or just filter by assigned_doctor name/id combo. 
+            // For now, let's assume filtering isn't strictly enforced on ID vs Name mixed types, 
+            // or we just don't filter if it's complex. 
+            // But let's try to match assigned_doctor column.
+            // query += ` AND assigned_doctor = $${paramIndex}`;
+            // params.push(doctor_id);
+            // paramIndex++;
+          }
 
-    query += ` ORDER BY queue_no ASC`;
+          query += ` ORDER BY queue_no ASC`;
 
-    const result = await pool.query(query, params);
+          const result = await pool.query(query, params);
 
-    // Ensure all rows have required fields with defaults
-    const sanitizedRows = result.rows.map(row => ({
-      ...row,
-      queue_status: row.queue_status || 'waiting',
-      queue_no: row.queue_no || 0,
-      assigned_doctor: row.assigned_doctor || 'Unassigned'
-    }));
+          // Ensure all rows have required fields with defaults
+          const sanitizedRows = result.rows.map(row => ({
+            ...row,
+            queue_status: row.queue_status || 'waiting',
+            queue_no: row.queue_no || 0,
+            assigned_doctor: row.assigned_doctor || 'Unassigned'
+          }));
 
-    res.json(sanitizedRows);
-  } catch (error) {
-    console.error('Error fetching OPD queues:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          res.json(sanitizedRows);
+        } catch (error) {
+          console.error('Error fetching OPD queues:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Get today's queue (Legacy)
-app.get('/api/queue/today', authenticateToken, async (req, res) => {
-  try {
-    const today = new Date().toISOString().split('T')[0];
+      // Get today's queue (Legacy)
+      app.get('/api/queue/today', authenticateToken, async (req, res) => {
+        try {
+          const today = new Date().toISOString().split('T')[0];
 
-    const result = await pool.query(
-      `SELECT
+          const result = await pool.query(
+            `SELECT
         id, patient_id, first_name, last_name, age, gender, phone,
         queue_no, queue_status, queue_date, created_at
       FROM patients
       WHERE queue_date = $1
       ORDER BY queue_no ASC`,
-      [today]
-    );
+            [today]
+          );
 
-    console.log(`📋 Retrieved ${result.rows.length} patients in today's queue`);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching queue:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          console.log(`📋 Retrieved ${result.rows.length} patients in today's queue`);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching queue:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Add to OPD Queue (Manual Add)
-app.post('/api/opd-queues', authenticateToken, async (req, res) => {
-  try {
-    const { patient_id, doctor_id, appointment_id, priority, notes } = req.body;
+      // Add to OPD Queue (Manual Add)
+      app.post('/api/opd-queues', authenticateToken, async (req, res) => {
+        try {
+          const { patient_id, doctor_id, appointment_id, priority, notes } = req.body;
 
-    // Logic:
-    // 1. We are "queueing" the patient, which in this system means updating their queue_no, queue_date, and queue_status in the 'patients' table.
-    // 2. We should also generate a new queue number for today.
+          // Logic:
+          // 1. We are "queueing" the patient, which in this system means updating their queue_no, queue_date, and queue_status in the 'patients' table.
+          // 2. We should also generate a new queue number for today.
 
-    const today = new Date().toISOString().split('T')[0];
+          const today = new Date().toISOString().split('T')[0];
 
-    // Get last queue number for today
-    const lastQueueResult = await pool.query(
-      `SELECT queue_no FROM patients
+          // Get last queue number for today
+          const lastQueueResult = await pool.query(
+            `SELECT queue_no FROM patients
        WHERE queue_date = $1
        ORDER BY queue_no DESC
        LIMIT 1`,
-      [today]
-    );
+            [today]
+          );
 
-    let queueNumber = 1;
-    if (lastQueueResult.rows.length > 0 && lastQueueResult.rows[0].queue_no) {
-      queueNumber = lastQueueResult.rows[0].queue_no + 1;
-    }
+          let queueNumber = 1;
+          if (lastQueueResult.rows.length > 0 && lastQueueResult.rows[0].queue_no) {
+            queueNumber = lastQueueResult.rows[0].queue_no + 1;
+          }
 
-    // Resolve Doctor ID to Name (Legacy Compatibility)
-    let doctorName = null;
-    if (doctor_id) {
-      try {
-        const docResult = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [doctor_id]);
-        if (docResult.rows.length > 0) {
-          const doc = docResult.rows[0];
-          doctorName = `Dr. ${doc.first_name} ${doc.last_name}`;
-        }
-      } catch (err) {
-        console.warn('Could not resolve doctor name from ID:', doctor_id);
-      }
-    }
+          // Resolve Doctor ID to Name (Legacy Compatibility)
+          let doctorName = null;
+          if (doctor_id) {
+            try {
+              const docResult = await pool.query('SELECT first_name, last_name FROM users WHERE id = $1', [doctor_id]);
+              if (docResult.rows.length > 0) {
+                const doc = docResult.rows[0];
+                doctorName = `Dr. ${doc.first_name} ${doc.last_name}`;
+              }
+            } catch (err) {
+              console.warn('Could not resolve doctor name from ID:', doctor_id);
+            }
+          }
 
-    // Use doctorName if resolved, otherwise if doctor_id doesn't look like UUID, maybe it's a name? 
-    const finalDoctorValue = doctorName || (doctor_id && !doctor_id.match(/^[0-9a-fA-F-]{36}$/) ? doctor_id : null);
+          // Use doctorName if resolved, otherwise if doctor_id doesn't look like UUID, maybe it's a name? 
+          const finalDoctorValue = doctorName || (doctor_id && !doctor_id.match(/^[0-9a-fA-F-]{36}$/) ? doctor_id : null);
 
-    // Update patient record
-    // We update assigned_doctor if provided, else keep existing.
-    // We set status to 'waiting'.
-    // We update queue_no and queue_date.
+          // Update patient record
+          // We update assigned_doctor if provided, else keep existing.
+          // We set status to 'waiting'.
+          // We update queue_no and queue_date.
 
-    const updateQuery = `
+          const updateQuery = `
       UPDATE patients
       SET 
         queue_no = $1,
@@ -702,170 +706,170 @@ app.post('/api/opd-queues', authenticateToken, async (req, res) => {
       RETURNING *
     `;
 
-    // Note: We are using COALESCE for doctor_id so we don't overwrite if null, 
-    // though usually frontend forces selection. 
-    // If 'notes' are provided, we could append or replace. For now let's leave notes alone or update if critical.
-    // The prompt implementation didn't specify notes field in database schema check, 
-    // but patients table has 'notes'. Let's not overwrite main medical notes with queue notes unless intended.
-    // We'll skip notes update for now to be safe, or append to a queue-specific log if we had one.
+          // Note: We are using COALESCE for doctor_id so we don't overwrite if null, 
+          // though usually frontend forces selection. 
+          // If 'notes' are provided, we could append or replace. For now let's leave notes alone or update if critical.
+          // The prompt implementation didn't specify notes field in database schema check, 
+          // but patients table has 'notes'. Let's not overwrite main medical notes with queue notes unless intended.
+          // We'll skip notes update for now to be safe, or append to a queue-specific log if we had one.
 
-    const result = await pool.query(updateQuery, [queueNumber, today, finalDoctorValue, patient_id]);
+          const result = await pool.query(updateQuery, [queueNumber, today, finalDoctorValue, patient_id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Patient not found' });
+          }
 
-    console.log(`✅ Manually added patient ${patient_id} to queue. Token: ${queueNumber}`);
-    res.json(result.rows[0]);
+          console.log(`✅ Manually added patient ${patient_id} to queue. Token: ${queueNumber}`);
+          res.json(result.rows[0]);
 
-  } catch (error) {
-    console.error('Error adding to OPD queue:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+        } catch (error) {
+          console.error('Error adding to OPD queue:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Update queue status
-app.put('/api/opd-queues/:id/status', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    let { queue_status } = req.body;
+      // Update queue status
+      app.put('/api/opd-queues/:id/status', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          let { queue_status } = req.body;
 
-    // Normalize status to lowercase and map common values
-    const statusMap = {
-      'WAITING': 'waiting',
-      'waiting': 'waiting',
-      'IN_CONSULTATION': 'called',
-      'called': 'called',
-      'COMPLETED': 'completed',
-      'completed': 'completed',
-      'VITALS_DONE': 'waiting' // Map VITALS_DONE to waiting
-    };
+          // Normalize status to lowercase and map common values
+          const statusMap = {
+            'WAITING': 'waiting',
+            'waiting': 'waiting',
+            'IN_CONSULTATION': 'called',
+            'called': 'called',
+            'COMPLETED': 'completed',
+            'completed': 'completed',
+            'VITALS_DONE': 'waiting' // Map VITALS_DONE to waiting
+          };
 
-    queue_status = statusMap[queue_status] || queue_status.toLowerCase();
+          queue_status = statusMap[queue_status] || queue_status.toLowerCase();
 
-    if (!['waiting', 'called', 'completed'].includes(queue_status)) {
-      return res.status(400).json({ error: 'Invalid queue status', received: queue_status });
-    }
+          if (!['waiting', 'called', 'completed'].includes(queue_status)) {
+            return res.status(400).json({ error: 'Invalid queue status', received: queue_status });
+          }
 
-    const result = await pool.query(
-      `UPDATE patients
+          const result = await pool.query(
+            `UPDATE patients
        SET queue_status = $1
        WHERE id = $2
        RETURNING id, patient_id, first_name, last_name, queue_no, queue_status`,
-      [queue_status, id]
-    );
+            [queue_status, id]
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Patient not found' });
+          }
 
-    console.log(`🎫 Updated queue status for patient ${result.rows[0].patient_id} to ${queue_status}`);
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating queue status:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          console.log(`🎫 Updated queue status for patient ${result.rows[0].patient_id} to ${queue_status}`);
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error updating queue status:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Reorder OPD Queue
-app.post('/api/opd-queues/reorder', authenticateToken, async (req, res) => {
-  try {
-    const { items } = req.body; // Array of { id, order }
+      // Reorder OPD Queue
+      app.post('/api/opd-queues/reorder', authenticateToken, async (req, res) => {
+        try {
+          const { items } = req.body; // Array of { id, order }
 
-    if (!items || !Array.isArray(items)) {
-      return res.status(400).json({ error: 'Invalid request: items array required' });
-    }
+          if (!items || !Array.isArray(items)) {
+            return res.status(400).json({ error: 'Invalid request: items array required' });
+          }
 
-    // Update queue_no for each patient based on new order
-    const updatePromises = items.map(item =>
-      pool.query(
-        'UPDATE patients SET queue_no = $1 WHERE id = $2',
-        [item.order, item.id]
-      )
-    );
+          // Update queue_no for each patient based on new order
+          const updatePromises = items.map(item =>
+            pool.query(
+              'UPDATE patients SET queue_no = $1 WHERE id = $2',
+              [item.order, item.id]
+            )
+          );
 
-    await Promise.all(updatePromises);
+          await Promise.all(updatePromises);
 
-    console.log(`🔄 Reordered ${items.length} queue items`);
-    res.json({ success: true, message: 'Queue reordered successfully' });
-  } catch (error) {
-    console.error('Error reordering queue:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          console.log(`🔄 Reordered ${items.length} queue items`);
+          res.json({ success: true, message: 'Queue reordered successfully' });
+        } catch (error) {
+          console.error('Error reordering queue:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Accept appointment - moves patient from pending to patient list
-app.put('/api/patients/:id/accept-appointment', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
+      // Accept appointment - moves patient from pending to patient list
+      app.put('/api/patients/:id/accept-appointment', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
 
-    const result = await pool.query(
-      `UPDATE patients
+          const result = await pool.query(
+            `UPDATE patients
        SET has_pending_appointment = false,
            queue_status = 'waiting'
        WHERE id = $1
        RETURNING *`,
-      [id]
-    );
+            [id]
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Patient not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Patient not found' });
+          }
 
-    console.log(`✅ Appointment accepted for patient ${result.rows[0].patient_id}`);
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error accepting appointment:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+          console.log(`✅ Appointment accepted for patient ${result.rows[0].patient_id}`);
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error accepting appointment:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Reject appointment - cancels appointment and optionally keeps patient hidden
-app.put('/api/patients/:id/reject-appointment', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { keep_patient } = req.body; // If true, keep patient but mark as rejected
+      // Reject appointment - cancels appointment and optionally keeps patient hidden
+      app.put('/api/patients/:id/reject-appointment', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const { keep_patient } = req.body; // If true, keep patient but mark as rejected
 
-    if (keep_patient) {
-      // Just set is_active to false to hide patient
-      const result = await pool.query(
-        `UPDATE patients
+          if (keep_patient) {
+            // Just set is_active to false to hide patient
+            const result = await pool.query(
+              `UPDATE patients
          SET has_pending_appointment = false,
              is_active = false
          WHERE id = $1
          RETURNING *`,
-        [id]
-      );
+              [id]
+            );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Patient not found' });
-      }
+            if (result.rows.length === 0) {
+              return res.status(404).json({ error: 'Patient not found' });
+            }
 
-      console.log(`❌ Appointment rejected for patient ${result.rows[0].patient_id} (patient deactivated)`);
-      res.json(result.rows[0]);
-    } else {
-      // Delete patient completely
-      await pool.query('DELETE FROM patient_transactions WHERE patient_id = $1', [id]);
-      const result = await pool.query('DELETE FROM patients WHERE id = $1 RETURNING patient_id', [id]);
+            console.log(`❌ Appointment rejected for patient ${result.rows[0].patient_id} (patient deactivated)`);
+            res.json(result.rows[0]);
+          } else {
+            // Delete patient completely
+            await pool.query('DELETE FROM patient_transactions WHERE patient_id = $1', [id]);
+            const result = await pool.query('DELETE FROM patients WHERE id = $1 RETURNING patient_id', [id]);
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Patient not found' });
-      }
+            if (result.rows.length === 0) {
+              return res.status(404).json({ error: 'Patient not found' });
+            }
 
-      console.log(`❌ Appointment rejected and patient ${result.rows[0].patient_id} deleted`);
-      res.json({ message: 'Appointment rejected and patient removed', patient_id: result.rows[0].patient_id });
-    }
-  } catch (error) {
-    console.error('Error rejecting appointment:', error);
-    res.status(500).json({ error: 'Server error', details: error.message });
-  }
-});
+            console.log(`❌ Appointment rejected and patient ${result.rows[0].patient_id} deleted`);
+            res.json({ message: 'Appointment rejected and patient removed', patient_id: result.rows[0].patient_id });
+          }
+        } catch (error) {
+          console.error('Error rejecting appointment:', error);
+          res.status(500).json({ error: 'Server error', details: error.message });
+        }
+      });
 
-// Get patient refunds
-app.get('/api/patient_refunds', authenticateToken, async (req, res) => {
-  try {
-    const { start_date, end_date } = req.query;
-    let query = `
+      // Get patient refunds
+      app.get('/api/patient_refunds', authenticateToken, async (req, res) => {
+        try {
+          const { start_date, end_date } = req.query;
+          let query = `
       SELECT r.*, 
              json_build_object(
                'id', p.id,
@@ -883,576 +887,576 @@ app.get('/api/patient_refunds', authenticateToken, async (req, res) => {
       LEFT JOIN patients p ON r.patient_id = p.patient_id
       WHERE 1=1
     `;
-    const params = [];
-    let paramCount = 1;
+          const params = [];
+          let paramCount = 1;
 
-    if (start_date) {
-      query += ` AND r.created_at >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
-    }
+          if (start_date) {
+            query += ` AND r.created_at >= $${paramCount}`;
+            params.push(start_date);
+            paramCount++;
+          }
 
-    if (end_date) {
-      query += ` AND r.created_at <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
-    }
+          if (end_date) {
+            query += ` AND r.created_at <= $${paramCount}`;
+            params.push(end_date);
+            paramCount++;
+          }
 
-    query += ' ORDER BY r.created_at DESC';
+          query += ' ORDER BY r.created_at DESC';
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching refunds:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching refunds:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== TRANSACTION ROUTES ====================
+      // ==================== TRANSACTION ROUTES ====================
 
-// Get all transactions
-app.get('/api/transactions', authenticateToken, async (req, res) => {
-  try {
-    const { patient_id, start_date, end_date } = req.query;
-    let query = 'SELECT * FROM patient_transactions WHERE 1=1';
-    const params = [];
-    let paramCount = 1;
+      // Get all transactions
+      app.get('/api/transactions', authenticateToken, async (req, res) => {
+        try {
+          const { patient_id, start_date, end_date } = req.query;
+          let query = 'SELECT * FROM patient_transactions WHERE 1=1';
+          const params = [];
+          let paramCount = 1;
 
-    if (patient_id) {
-      query += ` AND patient_id = $${paramCount}`;
-      params.push(patient_id);
-      paramCount++;
-    }
+          if (patient_id) {
+            query += ` AND patient_id = $${paramCount}`;
+            params.push(patient_id);
+            paramCount++;
+          }
 
-    if (start_date) {
-      query += ` AND transaction_date >= $${paramCount}`;
-      params.push(start_date);
-      paramCount++;
-    }
+          if (start_date) {
+            query += ` AND transaction_date >= $${paramCount}`;
+            params.push(start_date);
+            paramCount++;
+          }
 
-    if (end_date) {
-      query += ` AND transaction_date <= $${paramCount}`;
-      params.push(end_date);
-      paramCount++;
-    }
+          if (end_date) {
+            query += ` AND transaction_date <= $${paramCount}`;
+            params.push(end_date);
+            paramCount++;
+          }
 
-    query += ' ORDER BY created_at DESC';
+          query += ' ORDER BY created_at DESC';
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching transactions:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching transactions:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// Create transaction
-app.post('/api/transactions', authenticateToken, async (req, res) => {
-  try {
-    const {
-      patient_id,
-      transaction_type,
-      amount,
-      payment_mode,
-      doctor_id,
-      doctor_name,
-      department,
-      description,
-      transaction_date
-    } = req.body;
+      // Create transaction
+      app.post('/api/transactions', authenticateToken, async (req, res) => {
+        try {
+          const {
+            patient_id,
+            transaction_type,
+            amount,
+            payment_mode,
+            doctor_id,
+            doctor_name,
+            department,
+            description,
+            transaction_date
+          } = req.body;
 
-    const result = await pool.query(
-      `INSERT INTO patient_transactions (
+          const result = await pool.query(
+            `INSERT INTO patient_transactions (
         patient_id, transaction_type, amount, payment_mode,
         doctor_id, doctor_name, department, description,
         transaction_date, created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *`,
-      [
-        patient_id, transaction_type, amount, payment_mode,
-        doctor_id, doctor_name, department, description,
-        transaction_date || new Date(), req.user.id
-      ]
-    );
+            [
+              patient_id, transaction_type, amount, payment_mode,
+              doctor_id, doctor_name, department, description,
+              transaction_date || new Date(), req.user.id
+            ]
+          );
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error creating transaction:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error creating transaction:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== ADMISSION ROUTES ====================
+      // ==================== ADMISSION ROUTES ====================
 
-// Get all admissions
-app.get('/api/admissions', authenticateToken, async (req, res) => {
-  try {
-    const { status } = req.query;
-    let query = 'SELECT * FROM patient_admissions';
-    const params = [];
+      // Get all admissions
+      app.get('/api/admissions', authenticateToken, async (req, res) => {
+        try {
+          const { status } = req.query;
+          let query = 'SELECT * FROM patient_admissions';
+          const params = [];
 
-    if (status) {
-      query += ' WHERE status = $1';
-      params.push(status);
-    }
+          if (status) {
+            query += ' WHERE status = $1';
+            params.push(status);
+          }
 
-    query += ' ORDER BY admission_date DESC';
+          query += ' ORDER BY admission_date DESC';
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching admissions:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching admissions:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// Create admission
-app.post('/api/admissions', authenticateToken, async (req, res) => {
-  try {
-    const {
-      patient_id,
-      bed_number,
-      room_type,
-      department,
-      daily_rate,
-      admission_date,
-      treating_doctor,
-      history_present_illness
-    } = req.body;
+      // Create admission
+      app.post('/api/admissions', authenticateToken, async (req, res) => {
+        try {
+          const {
+            patient_id,
+            bed_number,
+            room_type,
+            department,
+            daily_rate,
+            admission_date,
+            treating_doctor,
+            history_present_illness
+          } = req.body;
 
-    // Start transaction
-    await pool.query('BEGIN');
+          // Start transaction
+          await pool.query('BEGIN');
 
-    // Create admission
-    const admissionResult = await pool.query(
-      `INSERT INTO patient_admissions (
+          // Create admission
+          const admissionResult = await pool.query(
+            `INSERT INTO patient_admissions (
         patient_id, bed_number, room_type, department,
         daily_rate, admission_date, treating_doctor,
         history_present_illness, created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *`,
-      [
-        patient_id, bed_number, room_type, department,
-        daily_rate, admission_date, treating_doctor,
-        history_present_illness, req.user.id
-      ]
-    );
+            [
+              patient_id, bed_number, room_type, department,
+              daily_rate, admission_date, treating_doctor,
+              history_present_illness, req.user.id
+            ]
+          );
 
-    // Update bed status
-    await pool.query(
-      'UPDATE beds SET status = $1, patient_id = $2 WHERE bed_number = $3',
-      ['occupied', patient_id, bed_number]
-    );
+          // Update bed status
+          await pool.query(
+            'UPDATE beds SET status = $1, patient_id = $2 WHERE bed_number = $3',
+            ['occupied', patient_id, bed_number]
+          );
 
-    // Create admission transaction
-    await pool.query(
-      `INSERT INTO patient_transactions (
+          // Create admission transaction
+          await pool.query(
+            `INSERT INTO patient_transactions (
         patient_id, transaction_type, amount, payment_mode,
         department, description, created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        patient_id, 'admission', daily_rate, 'cash',
-        department, `Admission to ${room_type} - Bed ${bed_number}`,
-        req.user.id
-      ]
-    );
+            [
+              patient_id, 'admission', daily_rate, 'cash',
+              department, `Admission to ${room_type} - Bed ${bed_number}`,
+              req.user.id
+            ]
+          );
 
-    await pool.query('COMMIT');
-    res.json(admissionResult.rows[0]);
-  } catch (error) {
-    await pool.query('ROLLBACK');
-    console.error('Error creating admission:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          await pool.query('COMMIT');
+          res.json(admissionResult.rows[0]);
+        } catch (error) {
+          await pool.query('ROLLBACK');
+          console.error('Error creating admission:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// Discharge patient
-app.post('/api/admissions/:id/discharge', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { discharge_date, final_diagnosis, discharge_instructions } = req.body;
+      // Discharge patient
+      app.post('/api/admissions/:id/discharge', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const { discharge_date, final_diagnosis, discharge_instructions } = req.body;
 
-    await pool.query('BEGIN');
+          await pool.query('BEGIN');
 
-    // Update admission
-    const admissionResult = await pool.query(
-      `UPDATE patient_admissions 
+          // Update admission
+          const admissionResult = await pool.query(
+            `UPDATE patient_admissions 
        SET discharge_date = $1, status = $2
        WHERE id = $3
        RETURNING *`,
-      [discharge_date, 'discharged', id]
-    );
+            [discharge_date, 'discharged', id]
+          );
 
-    if (admissionResult.rows.length === 0) {
-      await pool.query('ROLLBACK');
-      return res.status(404).json({ error: 'Admission not found' });
-    }
+          if (admissionResult.rows.length === 0) {
+            await pool.query('ROLLBACK');
+            return res.status(404).json({ error: 'Admission not found' });
+          }
 
-    const admission = admissionResult.rows[0];
+          const admission = admissionResult.rows[0];
 
-    // Free the bed
-    await pool.query(
-      'UPDATE beds SET status = $1, patient_id = NULL WHERE bed_number = $2',
-      ['available', admission.bed_number]
-    );
+          // Free the bed
+          await pool.query(
+            'UPDATE beds SET status = $1, patient_id = NULL WHERE bed_number = $2',
+            ['available', admission.bed_number]
+          );
 
-    // Create discharge summary
-    await pool.query(
-      `INSERT INTO discharge_summary (
+          // Create discharge summary
+          await pool.query(
+            `INSERT INTO discharge_summary (
         admission_id, patient_id, discharge_date,
         discharge_type, final_diagnosis, discharge_instructions,
         created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        id, admission.patient_id, discharge_date,
-        'Regular', final_diagnosis, discharge_instructions,
-        req.user.id
-      ]
-    );
+            [
+              id, admission.patient_id, discharge_date,
+              'Regular', final_diagnosis, discharge_instructions,
+              req.user.id
+            ]
+          );
 
-    await pool.query('COMMIT');
-    res.json({ message: 'Patient discharged successfully' });
-  } catch (error) {
-    await pool.query('ROLLBACK');
-    console.error('Error discharging patient:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          await pool.query('COMMIT');
+          res.json({ message: 'Patient discharged successfully' });
+        } catch (error) {
+          await pool.query('ROLLBACK');
+          console.error('Error discharging patient:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== DOCTOR ROUTES ====================
+      // ==================== DOCTOR ROUTES ====================
 
-// Get all doctors
-app.get('/api/doctors', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM doctors WHERE is_active = true ORDER BY first_name, last_name'
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching doctors:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+      // Get all doctors
+      app.get('/api/doctors', authenticateToken, async (req, res) => {
+        try {
+          const result = await pool.query(
+            'SELECT * FROM doctors WHERE is_active = true ORDER BY first_name, last_name'
+          );
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching doctors:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== BED ROUTES ====================
+      // ==================== BED ROUTES ====================
 
-// Get all beds
-app.get('/api/beds', authenticateToken, async (req, res) => {
-  try {
-    const { status } = req.query;
-    let query = 'SELECT * FROM beds';
-    const params = [];
+      // Get all beds
+      app.get('/api/beds', authenticateToken, async (req, res) => {
+        try {
+          const { status } = req.query;
+          let query = 'SELECT * FROM beds';
+          const params = [];
 
-    if (status) {
-      query += ' WHERE status = $1';
-      params.push(status);
-    }
+          if (status) {
+            query += ' WHERE status = $1';
+            params.push(status);
+          }
 
-    query += ' ORDER BY bed_number';
+          query += ' ORDER BY bed_number';
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching beds:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching beds:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== DASHBOARD ROUTES ====================
+      // ==================== DASHBOARD ROUTES ====================
 
-// Get dashboard stats
-app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
-  try {
-    // Get total patients
-    const patientsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM patients WHERE is_active = true'
-    );
+      // Get dashboard stats
+      app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
+        try {
+          // Get total patients
+          const patientsResult = await pool.query(
+            'SELECT COUNT(*) as count FROM patients WHERE is_active = true'
+          );
 
-    // Get active admissions
-    const admissionsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM patient_admissions WHERE status = $1',
-      ['active']
-    );
+          // Get active admissions
+          const admissionsResult = await pool.query(
+            'SELECT COUNT(*) as count FROM patient_admissions WHERE status = $1',
+            ['active']
+          );
 
-    // Get today's revenue
-    const revenueResult = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) as total 
+          // Get today's revenue
+          const revenueResult = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) as total 
        FROM patient_transactions 
        WHERE transaction_date = CURRENT_DATE`
-    );
+          );
 
-    // Get available beds
-    const bedsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM beds WHERE status = $1',
-      ['available']
-    );
+          // Get available beds
+          const bedsResult = await pool.query(
+            'SELECT COUNT(*) as count FROM beds WHERE status = $1',
+            ['available']
+          );
 
-    res.json({
-      totalPatients: parseInt(patientsResult.rows[0].count),
-      activeAdmissions: parseInt(admissionsResult.rows[0].count),
-      todayRevenue: parseFloat(revenueResult.rows[0].total),
-      availableBeds: parseInt(bedsResult.rows[0].count)
-    });
-  } catch (error) {
-    console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ==================== APPOINTMENT ROUTES ====================
-
-// Get all appointments
-app.get('/api/appointments', authenticateToken, async (req, res) => {
-  try {
-    const { doctor_id, patient_id, date, status } = req.query;
-    let query = 'SELECT * FROM appointments WHERE 1=1';
-    const params = [];
-    let paramCount = 1;
-
-    if (doctor_id) {
-      query += ` AND doctor_id = $${paramCount} `;
-      params.push(doctor_id);
-      paramCount++;
-    }
-    if (patient_id) {
-      query += ` AND patient_id = $${paramCount} `;
-      params.push(patient_id);
-      paramCount++;
-    }
-    if (date) {
-      query += ` AND DATE(scheduled_at) = $${paramCount} `;
-      params.push(date);
-      paramCount++;
-    }
-    if (status) {
-      query += ` AND status = $${paramCount} `;
-      params.push(status);
-      paramCount++;
-    }
-
-    query += ' ORDER BY scheduled_at ASC';
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching appointments:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Create appointment
-// Create appointment with Recurrence Support
-app.post('/api/appointments', authenticateToken, async (req, res) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const {
-      patient_id, doctor_id, department_id, scheduled_at, duration,
-      status, reason, appointment_type, notes, recurrence
-      // recurrence: { frequency: 'daily' | 'weekly' | 'monthly', endDate: string }
-    } = req.body;
-
-    const baseDate = new Date(scheduled_at);
-    const appointmentsToCreate = [];
-    const recurringGroupId = recurrence ? crypto.randomUUID() : null;
-
-    // Helper to add days
-    const addDays = (date, days) => {
-      const result = new Date(date);
-      result.setDate(result.getDate() + days);
-      return result;
-    };
-
-    // Helper to add months
-    const addMonths = (date, months) => {
-      const result = new Date(date);
-      result.setMonth(result.getMonth() + months);
-      return result;
-    };
-
-    if (recurrence && recurrence.endDate) {
-      const endDate = new Date(recurrence.endDate);
-      let currentDate = baseDate;
-      const MAX_OCCURRENCES = 52; // Safety limit
-      let count = 0;
-
-      while (currentDate <= endDate && count < MAX_OCCURRENCES) {
-        appointmentsToCreate.push(new Date(currentDate));
-
-        if (recurrence.frequency === 'daily') {
-          currentDate = addDays(currentDate, 1);
-        } else if (recurrence.frequency === 'weekly') {
-          currentDate = addDays(currentDate, 7);
-        } else if (recurrence.frequency === 'monthly') {
-          currentDate = addMonths(currentDate, 1);
-        } else {
-          break; // Unknown frequency
+          res.json({
+            totalPatients: parseInt(patientsResult.rows[0].count),
+            activeAdmissions: parseInt(admissionsResult.rows[0].count),
+            todayRevenue: parseFloat(revenueResult.rows[0].total),
+            availableBeds: parseInt(bedsResult.rows[0].count)
+          });
+        } catch (error) {
+          console.error('Error fetching dashboard stats:', error);
+          res.status(500).json({ error: 'Server error' });
         }
-        count++;
-      }
-    } else {
-      // Single appointment
-      appointmentsToCreate.push(baseDate);
-    }
+      });
 
-    let firstCreatedAppointment = null;
+      // ==================== APPOINTMENT ROUTES ====================
 
-    for (const aptDate of appointmentsToCreate) {
-      const result = await client.query(
-        `INSERT INTO appointments(
+      // Get all appointments
+      app.get('/api/appointments', authenticateToken, async (req, res) => {
+        try {
+          const { doctor_id, patient_id, date, status } = req.query;
+          let query = 'SELECT * FROM appointments WHERE 1=1';
+          const params = [];
+          let paramCount = 1;
+
+          if (doctor_id) {
+            query += ` AND doctor_id = $${paramCount} `;
+            params.push(doctor_id);
+            paramCount++;
+          }
+          if (patient_id) {
+            query += ` AND patient_id = $${paramCount} `;
+            params.push(patient_id);
+            paramCount++;
+          }
+          if (date) {
+            query += ` AND DATE(scheduled_at) = $${paramCount} `;
+            params.push(date);
+            paramCount++;
+          }
+          if (status) {
+            query += ` AND status = $${paramCount} `;
+            params.push(status);
+            paramCount++;
+          }
+
+          query += ' ORDER BY scheduled_at ASC';
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching appointments:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
+
+      // Create appointment
+      // Create appointment with Recurrence Support
+      app.post('/api/appointments', authenticateToken, async (req, res) => {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          const {
+            patient_id, doctor_id, department_id, scheduled_at, duration,
+            status, reason, appointment_type, notes, recurrence
+            // recurrence: { frequency: 'daily' | 'weekly' | 'monthly', endDate: string }
+          } = req.body;
+
+          const baseDate = new Date(scheduled_at);
+          const appointmentsToCreate = [];
+          const recurringGroupId = recurrence ? crypto.randomUUID() : null;
+
+          // Helper to add days
+          const addDays = (date, days) => {
+            const result = new Date(date);
+            result.setDate(result.getDate() + days);
+            return result;
+          };
+
+          // Helper to add months
+          const addMonths = (date, months) => {
+            const result = new Date(date);
+            result.setMonth(result.getMonth() + months);
+            return result;
+          };
+
+          if (recurrence && recurrence.endDate) {
+            const endDate = new Date(recurrence.endDate);
+            let currentDate = baseDate;
+            const MAX_OCCURRENCES = 52; // Safety limit
+            let count = 0;
+
+            while (currentDate <= endDate && count < MAX_OCCURRENCES) {
+              appointmentsToCreate.push(new Date(currentDate));
+
+              if (recurrence.frequency === 'daily') {
+                currentDate = addDays(currentDate, 1);
+              } else if (recurrence.frequency === 'weekly') {
+                currentDate = addDays(currentDate, 7);
+              } else if (recurrence.frequency === 'monthly') {
+                currentDate = addMonths(currentDate, 1);
+              } else {
+                break; // Unknown frequency
+              }
+              count++;
+            }
+          } else {
+            // Single appointment
+            appointmentsToCreate.push(baseDate);
+          }
+
+          let firstCreatedAppointment = null;
+
+          for (const aptDate of appointmentsToCreate) {
+            const result = await client.query(
+              `INSERT INTO appointments(
             patient_id, doctor_id, department_id, scheduled_at, duration,
             status, reason, appointment_type, notes, created_by, recurring_group_id
           ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           RETURNING * `,
-        [
-          patient_id, doctor_id, department_id, aptDate.toISOString(), duration,
-          status || 'SCHEDULED', reason, appointment_type, notes, req.user.id, recurringGroupId
-        ]
-      );
-      if (!firstCreatedAppointment) firstCreatedAppointment = result.rows[0];
-    }
+              [
+                patient_id, doctor_id, department_id, aptDate.toISOString(), duration,
+                status || 'SCHEDULED', reason, appointment_type, notes, req.user.id, recurringGroupId
+              ]
+            );
+            if (!firstCreatedAppointment) firstCreatedAppointment = result.rows[0];
+          }
 
-    await client.query('COMMIT');
-    res.json(firstCreatedAppointment);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error creating appointment:', error);
-    res.status(500).json({ error: 'Server error' });
-  } finally {
-    client.release();
-  }
-});
+          await client.query('COMMIT');
+          res.json(firstCreatedAppointment);
+        } catch (error) {
+          await client.query('ROLLBACK');
+          console.error('Error creating appointment:', error);
+          res.status(500).json({ error: 'Server error' });
+        } finally {
+          client.release();
+        }
+      });
 
-// Update appointment
-app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
-    const setClause = Object.keys(updates)
-      .map((key, index) => `${key} = $${index + 2} `)
-      .join(', ');
-    const values = [id, ...Object.values(updates)];
+      // Update appointment
+      app.put('/api/appointments/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const updates = req.body;
+          const setClause = Object.keys(updates)
+            .map((key, index) => `${key} = $${index + 2} `)
+            .join(', ');
+          const values = [id, ...Object.values(updates)];
 
-    const result = await pool.query(
-      `UPDATE appointments SET ${setClause} WHERE id = $1 RETURNING * `,
-      values
-    );
+          const result = await pool.query(
+            `UPDATE appointments SET ${setClause} WHERE id = $1 RETURNING * `,
+            values
+          );
 
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Appointment not found' });
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating appointment:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+          if (result.rows.length === 0) return res.status(404).json({ error: 'Appointment not found' });
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error updating appointment:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== DEPARTMENT ROUTES ====================
+      // ==================== DEPARTMENT ROUTES ====================
 
-app.get('/api/departments', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM departments ORDER BY name');
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching departments:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+      app.get('/api/departments', authenticateToken, async (req, res) => {
+        try {
+          const result = await pool.query('SELECT * FROM departments ORDER BY name');
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching departments:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== USER ROUTES ====================
+      // ==================== USER ROUTES ====================
 
-app.get('/api/users', authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query('SELECT id, email, first_name, last_name, role, is_active, created_at FROM users ORDER BY created_at DESC');
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
+      app.get('/api/users', authenticateToken, async (req, res) => {
+        try {
+          const result = await pool.query('SELECT id, email, first_name, last_name, role, is_active, created_at FROM users ORDER BY created_at DESC');
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching users:', error);
+          res.status(500).json({ error: 'Server error' });
+        }
+      });
 
-// ==================== GENERIC CRUD ROUTES (for other tables) ====================
+      // ==================== GENERIC CRUD ROUTES (for other tables) ====================
 
-// Helper for generic CRUD
-const createGenericRoutes = (tableName) => {
-  // Get all
-  app.get(`/ api / ${tableName} `, authenticateToken, async (req, res) => {
-    try {
-      const result = await pool.query(`SELECT * FROM ${tableName} ORDER BY created_at DESC`);
-      res.json(result.rows);
-    } catch (error) {
-      console.error(`Error fetching ${tableName}: `, error);
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
+      // Helper for generic CRUD
+      const createGenericRoutes = (tableName) => {
+        // Get all
+        app.get(`/ api / ${tableName} `, authenticateToken, async (req, res) => {
+          try {
+            const result = await pool.query(`SELECT * FROM ${tableName} ORDER BY created_at DESC`);
+            res.json(result.rows);
+          } catch (error) {
+            console.error(`Error fetching ${tableName}: `, error);
+            res.status(500).json({ error: 'Server error' });
+          }
+        });
 
-  // Create
-  app.post(`/ api / ${tableName} `, authenticateToken, async (req, res) => {
-    try {
-      const keys = Object.keys(req.body);
-      const values = Object.values(req.body);
-      const placeholders = keys.map((_, i) => `$${i + 1} `).join(', ');
+        // Create
+        app.post(`/ api / ${tableName} `, authenticateToken, async (req, res) => {
+          try {
+            const keys = Object.keys(req.body);
+            const values = Object.values(req.body);
+            const placeholders = keys.map((_, i) => `$${i + 1} `).join(', ');
 
-      const result = await pool.query(
-        `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES(${placeholders}) RETURNING * `,
-        values
-      );
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error(`Error creating ${tableName}: `, error);
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
+            const result = await pool.query(
+              `INSERT INTO ${tableName} (${keys.join(', ')}) VALUES(${placeholders}) RETURNING * `,
+              values
+            );
+            res.json(result.rows[0]);
+          } catch (error) {
+            console.error(`Error creating ${tableName}: `, error);
+            res.status(500).json({ error: 'Server error' });
+          }
+        });
 
-  // Update
-  app.put(`/ api / ${tableName}/:id`, authenticateToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      const setClause = Object.keys(updates)
-        .map((key, index) => `${key} = $${index + 2}`)
-        .join(', ');
-      const values = [id, ...Object.values(updates)];
+        // Update
+        app.put(`/ api / ${tableName}/:id`, authenticateToken, async (req, res) => {
+          try {
+            const { id } = req.params;
+            const updates = req.body;
+            const setClause = Object.keys(updates)
+              .map((key, index) => `${key} = $${index + 2}`)
+              .join(', ');
+            const values = [id, ...Object.values(updates)];
 
-      const result = await pool.query(
-        `UPDATE ${tableName} SET ${setClause} WHERE id = $1 RETURNING *`,
-        values
-      );
+            const result = await pool.query(
+              `UPDATE ${tableName} SET ${setClause} WHERE id = $1 RETURNING *`,
+              values
+            );
 
-      if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-      res.json(result.rows[0]);
-    } catch (error) {
-      console.error(`Error updating ${tableName}:`, error);
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
+            if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+            res.json(result.rows[0]);
+          } catch (error) {
+            console.error(`Error updating ${tableName}:`, error);
+            res.status(500).json({ error: 'Server error' });
+          }
+        });
 
-  // Delete
-  app.delete(`/api/${tableName}/:id`, authenticateToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const result = await pool.query(`DELETE FROM ${tableName} WHERE id = $1 RETURNING id`, [id]);
-      if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-      res.json({ message: 'Deleted successfully' });
-    } catch (error) {
-      console.error(`Error deleting ${tableName}:`, error);
-      res.status(500).json({ error: 'Server error' });
-    }
-  });
-};
+        // Delete
+        app.delete(`/api/${tableName}/:id`, authenticateToken, async (req, res) => {
+          try {
+            const { id } = req.params;
+            const result = await pool.query(`DELETE FROM ${tableName} WHERE id = $1 RETURNING id`, [id]);
+            if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+            res.json({ message: 'Deleted successfully' });
+          } catch (error) {
+            console.error(`Error deleting ${tableName}:`, error);
+            res.status(500).json({ error: 'Server error' });
+          }
+        });
+      };
 
-// Initialize generic routes for simple tables
-['audit_logs', 'custom_services', 'daily_expenses', 'medicines', 'email_logs', 'hospitals'].forEach(table => {
-  createGenericRoutes(table);
-});
+      // Initialize generic routes for simple tables
+      ['audit_logs', 'custom_services', 'daily_expenses', 'medicines', 'email_logs', 'hospitals'].forEach(table => {
+        createGenericRoutes(table);
+      });
 
-// =====================================================================
-// BILLING API ENDPOINTS
-// =====================================================================
+      // =====================================================================
+      // BILLING API ENDPOINTS
+      // =====================================================================
 
-// Initialize billing tables (run once)
-app.post('/api/billing/init-tables', authenticateToken, async (req, res) => {
-  try {
-    // Create OPD bills table (without foreign key - patients table doesn't have proper constraints)
-    await pool.query(`
+      // Initialize billing tables (run once)
+      app.post('/api/billing/init-tables', authenticateToken, async (req, res) => {
+        try {
+          // Create OPD bills table (without foreign key - patients table doesn't have proper constraints)
+          await pool.query(`
       CREATE TABLE IF NOT EXISTS opd_bills (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         bill_id VARCHAR(50) UNIQUE NOT NULL,
@@ -1475,8 +1479,8 @@ app.post('/api/billing/init-tables', authenticateToken, async (req, res) => {
       )
     `);
 
-    // Create IPD bills table (without foreign key)
-    await pool.query(`
+          // Create IPD bills table (without foreign key)
+          await pool.query(`
       CREATE TABLE IF NOT EXISTS ipd_bills (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         bill_id VARCHAR(50) UNIQUE NOT NULL,
@@ -1499,332 +1503,332 @@ app.post('/api/billing/init-tables', authenticateToken, async (req, res) => {
       )
     `);
 
-    // Create indexes
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_opd_bills_patient ON opd_bills(patient_id)');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_opd_bills_date ON opd_bills(bill_date)');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_ipd_bills_patient ON ipd_bills(patient_id)');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_ipd_bills_date ON ipd_bills(bill_date)');
+          // Create indexes
+          await pool.query('CREATE INDEX IF NOT EXISTS idx_opd_bills_patient ON opd_bills(patient_id)');
+          await pool.query('CREATE INDEX IF NOT EXISTS idx_opd_bills_date ON opd_bills(bill_date)');
+          await pool.query('CREATE INDEX IF NOT EXISTS idx_ipd_bills_patient ON ipd_bills(patient_id)');
+          await pool.query('CREATE INDEX IF NOT EXISTS idx_ipd_bills_date ON ipd_bills(bill_date)');
 
-    res.json({ message: 'Billing tables initialized successfully' });
-  } catch (error) {
-    console.error('Error initializing billing tables:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json({ message: 'Billing tables initialized successfully' });
+        } catch (error) {
+          console.error('Error initializing billing tables:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Get all OPD bills
-app.get('/api/billing/opd', authenticateToken, async (req, res) => {
-  try {
-    const { patient_id, bill_type, payment_status, date_from, date_to } = req.query;
+      // Get all OPD bills
+      app.get('/api/billing/opd', authenticateToken, async (req, res) => {
+        try {
+          const { patient_id, bill_type, payment_status, date_from, date_to } = req.query;
 
-    let query = 'SELECT * FROM opd_bills WHERE 1=1';
-    const params = [];
-    let paramCount = 1;
+          let query = 'SELECT * FROM opd_bills WHERE 1=1';
+          const params = [];
+          let paramCount = 1;
 
-    if (patient_id) {
-      query += ` AND patient_id = $${paramCount++}`;
-      params.push(patient_id);
-    }
-    if (payment_status) {
-      query += ` AND status = $${paramCount++}`;
-      params.push(payment_status);
-    }
-    if (date_from) {
-      query += ` AND bill_date >= $${paramCount++}`;
-      params.push(date_from);
-    }
-    if (date_to) {
-      query += ` AND bill_date <= $${paramCount++}`;
-      params.push(date_to);
-    }
+          if (patient_id) {
+            query += ` AND patient_id = $${paramCount++}`;
+            params.push(patient_id);
+          }
+          if (payment_status) {
+            query += ` AND status = $${paramCount++}`;
+            params.push(payment_status);
+          }
+          if (date_from) {
+            query += ` AND bill_date >= $${paramCount++}`;
+            params.push(date_from);
+          }
+          if (date_to) {
+            query += ` AND bill_date <= $${paramCount++}`;
+            params.push(date_to);
+          }
 
-    query += ' ORDER BY bill_date DESC';
+          query += ' ORDER BY bill_date DESC';
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching OPD bills:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching OPD bills:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Create OPD bill
-app.post('/api/billing/opd', authenticateToken, async (req, res) => {
-  try {
-    const {
-      bill_id, patient_id, patient_name, doctor_id, doctor_name,
-      services, consultation_fee, investigation_charges, medicine_charges,
-      other_charges, discount, total_amount, status, payment_mode
-    } = req.body;
+      // Create OPD bill
+      app.post('/api/billing/opd', authenticateToken, async (req, res) => {
+        try {
+          const {
+            bill_id, patient_id, patient_name, doctor_id, doctor_name,
+            services, consultation_fee, investigation_charges, medicine_charges,
+            other_charges, discount, total_amount, status, payment_mode
+          } = req.body;
 
-    const result = await pool.query(
-      `INSERT INTO opd_bills (
+          const result = await pool.query(
+            `INSERT INTO opd_bills (
         bill_id, patient_id, patient_name, doctor_id, doctor_name,
         services, consultation_fee, investigation_charges, medicine_charges,
         other_charges, discount, total_amount, status, payment_mode
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
-      [bill_id, patient_id, patient_name, doctor_id, doctor_name,
-        JSON.stringify(services || []), consultation_fee || 0, investigation_charges || 0,
-        medicine_charges || 0, other_charges || 0, discount || 0,
-        total_amount, status || 'PAID', payment_mode]
-    );
+            [bill_id, patient_id, patient_name, doctor_id, doctor_name,
+              JSON.stringify(services || []), consultation_fee || 0, investigation_charges || 0,
+              medicine_charges || 0, other_charges || 0, discount || 0,
+              total_amount, status || 'PAID', payment_mode]
+          );
 
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error('Error creating OPD bill:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.status(201).json(result.rows[0]);
+        } catch (error) {
+          console.error('Error creating OPD bill:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Update OPD bill
-app.put('/api/billing/opd/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
+      // Update OPD bill
+      app.put('/api/billing/opd/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const updates = req.body;
 
-    if (updates.services) {
-      updates.services = JSON.stringify(updates.services);
-    }
+          if (updates.services) {
+            updates.services = JSON.stringify(updates.services);
+          }
 
-    const setClause = Object.keys(updates)
-      .map((key, index) => `${key} = $${index + 2}`)
-      .join(', ');
-    const values = [id, ...Object.values(updates)];
+          const setClause = Object.keys(updates)
+            .map((key, index) => `${key} = $${index + 2}`)
+            .join(', ');
+          const values = [id, ...Object.values(updates)];
 
-    const result = await pool.query(
-      `UPDATE opd_bills SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
-      values
-    );
+          const result = await pool.query(
+            `UPDATE opd_bills SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+            values
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'OPD bill not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'OPD bill not found' });
+          }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating OPD bill:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error updating OPD bill:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Delete OPD bill
-app.delete('/api/billing/opd/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query('DELETE FROM opd_bills WHERE id = $1 RETURNING id', [id]);
+      // Delete OPD bill
+      app.delete('/api/billing/opd/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const result = await pool.query('DELETE FROM opd_bills WHERE id = $1 RETURNING id', [id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'OPD bill not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'OPD bill not found' });
+          }
 
-    res.json({ message: 'OPD bill deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting OPD bill:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json({ message: 'OPD bill deleted successfully' });
+        } catch (error) {
+          console.error('Error deleting OPD bill:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Generate next OPD bill ID
-app.get('/api/billing/opd/next-id', authenticateToken, async (req, res) => {
-  try {
-    const year = new Date().getFullYear();
-    const result = await pool.query(
-      'SELECT bill_id FROM opd_bills WHERE bill_id LIKE $1 ORDER BY bill_id DESC LIMIT 1',
-      [`OPD-${year}-%`]
-    );
+      // Generate next OPD bill ID
+      app.get('/api/billing/opd/next-id', authenticateToken, async (req, res) => {
+        try {
+          const year = new Date().getFullYear();
+          const result = await pool.query(
+            'SELECT bill_id FROM opd_bills WHERE bill_id LIKE $1 ORDER BY bill_id DESC LIMIT 1',
+            [`OPD-${year}-%`]
+          );
 
-    let sequence = 1;
-    if (result.rows.length > 0) {
-      const lastId = result.rows[0].bill_id;
-      const lastSequence = parseInt(lastId.split('-')[2]);
-      sequence = lastSequence + 1;
-    }
+          let sequence = 1;
+          if (result.rows.length > 0) {
+            const lastId = result.rows[0].bill_id;
+            const lastSequence = parseInt(lastId.split('-')[2]);
+            sequence = lastSequence + 1;
+          }
 
-    const billId = `OPD-${year}-${String(sequence).padStart(4, '0')}`;
-    res.json({ billId });
-  } catch (error) {
-    console.error('Error generating OPD bill ID:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          const billId = `OPD-${year}-${String(sequence).padStart(4, '0')}`;
+          res.json({ billId });
+        } catch (error) {
+          console.error('Error generating OPD bill ID:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Get all IPD bills
-app.get('/api/billing/ipd', authenticateToken, async (req, res) => {
-  try {
-    const { patient_id, bill_type, payment_status, date_from, date_to } = req.query;
+      // Get all IPD bills
+      app.get('/api/billing/ipd', authenticateToken, async (req, res) => {
+        try {
+          const { patient_id, bill_type, payment_status, date_from, date_to } = req.query;
 
-    let query = 'SELECT * FROM ipd_bills WHERE 1=1';
-    const params = [];
-    let paramCount = 1;
+          let query = 'SELECT * FROM ipd_bills WHERE 1=1';
+          const params = [];
+          let paramCount = 1;
 
-    if (patient_id) {
-      query += ` AND patient_id = $${paramCount++}`;
-      params.push(patient_id);
-    }
-    if (payment_status) {
-      query += ` AND status = $${paramCount++}`;
-      params.push(payment_status);
-    }
-    if (date_from) {
-      query += ` AND bill_date >= $${paramCount++}`;
-      params.push(date_from);
-    }
-    if (date_to) {
-      query += ` AND bill_date <= $${paramCount++}`;
-      params.push(date_to);
-    }
+          if (patient_id) {
+            query += ` AND patient_id = $${paramCount++}`;
+            params.push(patient_id);
+          }
+          if (payment_status) {
+            query += ` AND status = $${paramCount++}`;
+            params.push(payment_status);
+          }
+          if (date_from) {
+            query += ` AND bill_date >= $${paramCount++}`;
+            params.push(date_from);
+          }
+          if (date_to) {
+            query += ` AND bill_date <= $${paramCount++}`;
+            params.push(date_to);
+          }
 
-    query += ' ORDER BY bill_date DESC';
+          query += ' ORDER BY bill_date DESC';
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching IPD bills:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          const result = await pool.query(query, params);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error fetching IPD bills:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Create IPD bill
-app.post('/api/billing/ipd', authenticateToken, async (req, res) => {
-  try {
-    const {
-      bill_id, patient_id, patient_name, admission_date, discharge_date,
-      admission_charges, stay_segments, services, total_stay_charges,
-      total_service_charges, discount, total_amount, status, payment_mode
-    } = req.body;
+      // Create IPD bill
+      app.post('/api/billing/ipd', authenticateToken, async (req, res) => {
+        try {
+          const {
+            bill_id, patient_id, patient_name, admission_date, discharge_date,
+            admission_charges, stay_segments, services, total_stay_charges,
+            total_service_charges, discount, total_amount, status, payment_mode
+          } = req.body;
 
-    const result = await pool.query(
-      `INSERT INTO ipd_bills (
+          const result = await pool.query(
+            `INSERT INTO ipd_bills (
         bill_id, patient_id, patient_name, admission_date, discharge_date,
         admission_charges, stay_segments, services, total_stay_charges,
         total_service_charges, discount, total_amount, status, payment_mode
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING *`,
-      [bill_id, patient_id, patient_name, admission_date, discharge_date,
-        admission_charges || 0, JSON.stringify(stay_segments || []),
-        JSON.stringify(services || []), total_stay_charges || 0,
-        total_service_charges || 0, discount || 0, total_amount,
-        status || 'PAID', payment_mode]
-    );
+            [bill_id, patient_id, patient_name, admission_date, discharge_date,
+              admission_charges || 0, JSON.stringify(stay_segments || []),
+              JSON.stringify(services || []), total_stay_charges || 0,
+              total_service_charges || 0, discount || 0, total_amount,
+              status || 'PAID', payment_mode]
+          );
 
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error('Error creating IPD bill:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.status(201).json(result.rows[0]);
+        } catch (error) {
+          console.error('Error creating IPD bill:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Update IPD bill
-app.put('/api/billing/ipd/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body;
+      // Update IPD bill
+      app.put('/api/billing/ipd/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const updates = req.body;
 
-    if (updates.stay_segments) {
-      updates.stay_segments = JSON.stringify(updates.stay_segments);
-    }
-    if (updates.services) {
-      updates.services = JSON.stringify(updates.services);
-    }
+          if (updates.stay_segments) {
+            updates.stay_segments = JSON.stringify(updates.stay_segments);
+          }
+          if (updates.services) {
+            updates.services = JSON.stringify(updates.services);
+          }
 
-    const setClause = Object.keys(updates)
-      .map((key, index) => `${key} = $${index + 2}`)
-      .join(', ');
-    const values = [id, ...Object.values(updates)];
+          const setClause = Object.keys(updates)
+            .map((key, index) => `${key} = $${index + 2}`)
+            .join(', ');
+          const values = [id, ...Object.values(updates)];
 
-    const result = await pool.query(
-      `UPDATE ipd_bills SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
-      values
-    );
+          const result = await pool.query(
+            `UPDATE ipd_bills SET ${setClause}, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *`,
+            values
+          );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'IPD bill not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'IPD bill not found' });
+          }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating IPD bill:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error updating IPD bill:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Delete IPD bill
-app.delete('/api/billing/ipd/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await pool.query('DELETE FROM ipd_bills WHERE id = $1 RETURNING id', [id]);
+      // Delete IPD bill
+      app.delete('/api/billing/ipd/:id', authenticateToken, async (req, res) => {
+        try {
+          const { id } = req.params;
+          const result = await pool.query('DELETE FROM ipd_bills WHERE id = $1 RETURNING id', [id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'IPD bill not found' });
-    }
+          if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'IPD bill not found' });
+          }
 
-    res.json({ message: 'IPD bill deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting IPD bill:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json({ message: 'IPD bill deleted successfully' });
+        } catch (error) {
+          console.error('Error deleting IPD bill:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Generate next IPD bill ID
-app.get('/api/billing/ipd/next-id', authenticateToken, async (req, res) => {
-  try {
-    const year = new Date().getFullYear();
-    const result = await pool.query(
-      'SELECT bill_id FROM ipd_bills WHERE bill_id LIKE $1 ORDER BY bill_id DESC LIMIT 1',
-      [`IPD-${year}-%`]
-    );
+      // Generate next IPD bill ID
+      app.get('/api/billing/ipd/next-id', authenticateToken, async (req, res) => {
+        try {
+          const year = new Date().getFullYear();
+          const result = await pool.query(
+            'SELECT bill_id FROM ipd_bills WHERE bill_id LIKE $1 ORDER BY bill_id DESC LIMIT 1',
+            [`IPD-${year}-%`]
+          );
 
-    let sequence = 1;
-    if (result.rows.length > 0) {
-      const lastId = result.rows[0].bill_id;
-      const lastSequence = parseInt(lastId.split('-')[2]);
-      sequence = lastSequence + 1;
-    }
+          let sequence = 1;
+          if (result.rows.length > 0) {
+            const lastId = result.rows[0].bill_id;
+            const lastSequence = parseInt(lastId.split('-')[2]);
+            sequence = lastSequence + 1;
+          }
 
-    const billId = `IPD-${year}-${String(sequence).padStart(4, '0')}`;
-    res.json({ billId });
-  } catch (error) {
-    console.error('Error generating IPD bill ID:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          const billId = `IPD-${year}-${String(sequence).padStart(4, '0')}`;
+          res.json({ billId });
+        } catch (error) {
+          console.error('Error generating IPD bill ID:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Get recent bills (combined OPD + IPD)
-app.get('/api/billing/recent', authenticateToken, async (req, res) => {
-  try {
-    const opdResult = await pool.query(
-      `SELECT id, bill_id as "billId", patient_name as "patientName", 
+      // Get recent bills (combined OPD + IPD)
+      app.get('/api/billing/recent', authenticateToken, async (req, res) => {
+        try {
+          const opdResult = await pool.query(
+            `SELECT id, bill_id as "billId", patient_name as "patientName", 
               'OPD' as type, total_amount as amount, status, bill_date as date
        FROM opd_bills 
        ORDER BY bill_date DESC 
        LIMIT 50`
-    );
+          );
 
-    const ipdResult = await pool.query(
-      `SELECT id, bill_id as "billId", patient_name as "patientName", 
+          const ipdResult = await pool.query(
+            `SELECT id, bill_id as "billId", patient_name as "patientName", 
               'IPD' as type, total_amount as amount, status, bill_date as date
        FROM ipd_bills 
        ORDER BY bill_date DESC 
        LIMIT 50`
-    );
+          );
 
-    const combined = [...opdResult.rows, ...ipdResult.rows]
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 100);
+          const combined = [...opdResult.rows, ...ipdResult.rows]
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .slice(0, 100);
 
-    res.json(combined);
-  } catch (error) {
-    console.error('Error fetching recent bills:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json(combined);
+        } catch (error) {
+          console.error('Error fetching recent bills:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Get billing summary
-app.get('/api/billing/summary', authenticateToken, async (req, res) => {
-  try {
-    // Get OPD stats
-    const opdStats = await pool.query(`
+      // Get billing summary
+      app.get('/api/billing/summary', authenticateToken, async (req, res) => {
+        try {
+          // Get OPD stats
+          const opdStats = await pool.query(`
       SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
@@ -1832,8 +1836,8 @@ app.get('/api/billing/summary', authenticateToken, async (req, res) => {
       FROM opd_bills
     `);
 
-    // Get IPD stats
-    const ipdStats = await pool.query(`
+          // Get IPD stats
+          const ipdStats = await pool.query(`
       SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE status = 'PENDING') as pending,
@@ -1841,208 +1845,208 @@ app.get('/api/billing/summary', authenticateToken, async (req, res) => {
       FROM ipd_bills
     `);
 
-    const opdData = opdStats.rows[0];
-    const ipdData = ipdStats.rows[0];
+          const opdData = opdStats.rows[0];
+          const ipdData = ipdStats.rows[0];
 
-    res.json({
-      totalRevenue: parseFloat(opdData.revenue) + parseFloat(ipdData.revenue),
-      opdBills: parseInt(opdData.total),
-      ipdBills: parseInt(ipdData.total),
-      pendingBills: parseInt(opdData.pending) + parseInt(ipdData.pending),
-      totalDeposits: parseFloat(opdData.revenue) + parseFloat(ipdData.revenue)
-    });
-  } catch (error) {
-    console.error('Error fetching billing summary:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Clear all bills (development/testing only)
-app.delete('/api/billing/clear-all', authenticateToken, async (req, res) => {
-  try {
-    await pool.query('DELETE FROM opd_bills');
-    await pool.query('DELETE FROM ipd_bills');
-    res.json({ message: 'All bills cleared successfully' });
-  } catch (error) {
-    console.error('Error clearing bills:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-
-// ==================== UHID ROUTES ====================
-
-// Get UHID configuration
-app.get('/api/uhid/config', authenticateToken, async (req, res) => {
-  try {
-    const hospitalId = req.query.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
-
-    const result = await pool.query(
-      'SELECT * FROM uhid_config WHERE hospital_id = $1',
-      [hospitalId]
-    );
-
-    if (result.rows.length === 0) {
-      // Return default config if not exists
-      return res.json({
-        prefix: 'MH',
-        year_format: 'YYYY',
-        current_sequence: 0,
-        hospital_id: hospitalId
+          res.json({
+            totalRevenue: parseFloat(opdData.revenue) + parseFloat(ipdData.revenue),
+            opdBills: parseInt(opdData.total),
+            ipdBills: parseInt(ipdData.total),
+            pendingBills: parseInt(opdData.pending) + parseInt(ipdData.pending),
+            totalDeposits: parseFloat(opdData.revenue) + parseFloat(ipdData.revenue)
+          });
+        } catch (error) {
+          console.error('Error fetching billing summary:', error);
+          res.status(500).json({ error: error.message });
+        }
       });
-    }
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error fetching UHID config:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+      // Clear all bills (development/testing only)
+      app.delete('/api/billing/clear-all', authenticateToken, async (req, res) => {
+        try {
+          await pool.query('DELETE FROM opd_bills');
+          await pool.query('DELETE FROM ipd_bills');
+          res.json({ message: 'All bills cleared successfully' });
+        } catch (error) {
+          console.error('Error clearing bills:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Generate new UHID
-app.post('/api/uhid/generate', authenticateToken, async (req, res) => {
-  try {
-    const hospitalId = req.body.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
 
-    // Try using the database function first
-    try {
-      const result = await pool.query(
-        'SELECT generate_uhid($1) as uhid',
-        [hospitalId]
-      );
-      return res.json({ uhid: result.rows[0].uhid });
-    } catch (funcError) {
-      // Function might not exist, fall back to manual generation
-      console.log('generate_uhid function not found, using manual generation');
-    }
+      // ==================== UHID ROUTES ====================
 
-    // Manual UHID generation with atomic update
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+      // Get UHID configuration
+      app.get('/api/uhid/config', authenticateToken, async (req, res) => {
+        try {
+          const hospitalId = req.query.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
 
-      // Get or create config with row lock
-      let configResult = await client.query(
-        'SELECT * FROM uhid_config WHERE hospital_id = $1 FOR UPDATE',
-        [hospitalId]
-      );
+          const result = await pool.query(
+            'SELECT * FROM uhid_config WHERE hospital_id = $1',
+            [hospitalId]
+          );
 
-      let prefix, sequence;
+          if (result.rows.length === 0) {
+            // Return default config if not exists
+            return res.json({
+              prefix: 'MH',
+              year_format: 'YYYY',
+              current_sequence: 0,
+              hospital_id: hospitalId
+            });
+          }
 
-      if (configResult.rows.length === 0) {
-        // Create config if not exists
-        const insertResult = await client.query(
-          `INSERT INTO uhid_config (prefix, year_format, current_sequence, hospital_id)
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error fetching UHID config:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
+
+      // Generate new UHID
+      app.post('/api/uhid/generate', authenticateToken, async (req, res) => {
+        try {
+          const hospitalId = req.body.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
+
+          // Try using the database function first
+          try {
+            const result = await pool.query(
+              'SELECT generate_uhid($1) as uhid',
+              [hospitalId]
+            );
+            return res.json({ uhid: result.rows[0].uhid });
+          } catch (funcError) {
+            // Function might not exist, fall back to manual generation
+            console.log('generate_uhid function not found, using manual generation');
+          }
+
+          // Manual UHID generation with atomic update
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+
+            // Get or create config with row lock
+            let configResult = await client.query(
+              'SELECT * FROM uhid_config WHERE hospital_id = $1 FOR UPDATE',
+              [hospitalId]
+            );
+
+            let prefix, sequence;
+
+            if (configResult.rows.length === 0) {
+              // Create config if not exists
+              const insertResult = await client.query(
+                `INSERT INTO uhid_config (prefix, year_format, current_sequence, hospital_id)
            VALUES ('MH', 'YYYY', 1, $1)
            RETURNING prefix, current_sequence`,
-          [hospitalId]
-        );
-        prefix = insertResult.rows[0].prefix;
-        sequence = insertResult.rows[0].current_sequence;
-      } else {
-        // Update sequence
-        const updateResult = await client.query(
-          `UPDATE uhid_config 
+                [hospitalId]
+              );
+              prefix = insertResult.rows[0].prefix;
+              sequence = insertResult.rows[0].current_sequence;
+            } else {
+              // Update sequence
+              const updateResult = await client.query(
+                `UPDATE uhid_config 
            SET current_sequence = current_sequence + 1, updated_at = NOW()
            WHERE hospital_id = $1
            RETURNING prefix, current_sequence`,
-          [hospitalId]
-        );
-        prefix = updateResult.rows[0].prefix;
-        sequence = updateResult.rows[0].current_sequence;
-      }
+                [hospitalId]
+              );
+              prefix = updateResult.rows[0].prefix;
+              sequence = updateResult.rows[0].current_sequence;
+            }
 
-      await client.query('COMMIT');
+            await client.query('COMMIT');
 
-      // Format UHID: MH-2026-000001
-      const year = new Date().getFullYear();
-      const uhid = `${prefix}-${year}-${String(sequence).padStart(6, '0')}`;
+            // Format UHID: MH-2026-000001
+            const year = new Date().getFullYear();
+            const uhid = `${prefix}-${year}-${String(sequence).padStart(6, '0')}`;
 
-      res.json({ uhid });
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('Error generating UHID:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+            res.json({ uhid });
+          } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+          } finally {
+            client.release();
+          }
+        } catch (error) {
+          console.error('Error generating UHID:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Update UHID configuration
-app.put('/api/uhid/config', authenticateToken, async (req, res) => {
-  try {
-    // Only admins can update config
-    if (req.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+      // Update UHID configuration
+      app.put('/api/uhid/config', authenticateToken, async (req, res) => {
+        try {
+          // Only admins can update config
+          if (req.user.role !== 'ADMIN') {
+            return res.status(403).json({ error: 'Unauthorized' });
+          }
 
-    const { prefix, year_format, hospital_id } = req.body;
-    const hospitalId = hospital_id || '550e8400-e29b-41d4-a716-446655440000';
+          const { prefix, year_format, hospital_id } = req.body;
+          const hospitalId = hospital_id || '550e8400-e29b-41d4-a716-446655440000';
 
-    const result = await pool.query(
-      `INSERT INTO uhid_config (prefix, year_format, hospital_id)
+          const result = await pool.query(
+            `INSERT INTO uhid_config (prefix, year_format, hospital_id)
        VALUES ($1, $2, $3)
        ON CONFLICT (hospital_id) DO UPDATE
        SET prefix = $1, year_format = $2, updated_at = NOW()
        RETURNING *`,
-      [prefix || 'MH', year_format || 'YYYY', hospitalId]
-    );
+            [prefix || 'MH', year_format || 'YYYY', hospitalId]
+          );
 
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error updating UHID config:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json(result.rows[0]);
+        } catch (error) {
+          console.error('Error updating UHID config:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Get current UHID sequence (for display purposes)
-app.get('/api/uhid/next', authenticateToken, async (req, res) => {
-  try {
-    const hospitalId = req.query.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
+      // Get current UHID sequence (for display purposes)
+      app.get('/api/uhid/next', authenticateToken, async (req, res) => {
+        try {
+          const hospitalId = req.query.hospital_id || '550e8400-e29b-41d4-a716-446655440000';
 
-    const result = await pool.query(
-      'SELECT prefix, current_sequence FROM uhid_config WHERE hospital_id = $1',
-      [hospitalId]
-    );
+          const result = await pool.query(
+            'SELECT prefix, current_sequence FROM uhid_config WHERE hospital_id = $1',
+            [hospitalId]
+          );
 
-    let prefix = 'MH';
-    let nextSequence = 1;
+          let prefix = 'MH';
+          let nextSequence = 1;
 
-    if (result.rows.length > 0) {
-      prefix = result.rows[0].prefix;
-      nextSequence = result.rows[0].current_sequence + 1;
-    }
+          if (result.rows.length > 0) {
+            prefix = result.rows[0].prefix;
+            nextSequence = result.rows[0].current_sequence + 1;
+          }
 
-    const year = new Date().getFullYear();
-    const nextUhid = `${prefix}-${year}-${String(nextSequence).padStart(6, '0')}`;
+          const year = new Date().getFullYear();
+          const nextUhid = `${prefix}-${year}-${String(nextSequence).padStart(6, '0')}`;
 
-    res.json({ next_uhid: nextUhid, sequence: nextSequence });
-  } catch (error) {
-    console.error('Error getting next UHID:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
+          res.json({ next_uhid: nextUhid, sequence: nextSequence });
+        } catch (error) {
+          console.error('Error getting next UHID:', error);
+          res.status(500).json({ error: error.message });
+        }
+      });
 
-// Catch-all handler: send back React's index.html file for client-side routing
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../dist/index.html'));
-});
+      // Catch-all handler: send back React's index.html file for client-side routing
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../dist/index.html'));
+      });
 
-// ==================== ICD-10 ROUTES ====================
+      // ==================== ICD-10 ROUTES ====================
 
-// Search ICD-10 codes
-app.get('/api/icd10', async (req, res) => {
-  try {
-    const { q } = req.query;
+      // Search ICD-10 codes
+      app.get('/api/icd10', async (req, res) => {
+        try {
+          const { q } = req.query;
 
-    if (!q || q.length < 2) {
-      return res.json([]);
-    }
+          if (!q || q.length < 2) {
+            return res.json([]);
+          }
 
-    const query = `
+          const query = `
       SELECT code, description 
       FROM icd10_codes 
       WHERE (code ILIKE $1 OR description ILIKE $1) AND active = true
@@ -2056,59 +2060,59 @@ app.get('/api/icd10', async (req, res) => {
       LIMIT 20
     `;
 
-    const searchTerm = `%${q}%`;
-    const startTerm = `${q}%`;
+          const searchTerm = `%${q}%`;
+          const startTerm = `${q}%`;
 
-    const result = await pool.query(query, [searchTerm, startTerm]);
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error searching ICD-10 codes:', error);
-    res.status(500).json({ error: 'Failed to search ICD-10 codes' });
-  }
-});
+          const result = await pool.query(query, [searchTerm, startTerm]);
+          res.json(result.rows);
+        } catch (error) {
+          console.error('Error searching ICD-10 codes:', error);
+          res.status(500).json({ error: 'Failed to search ICD-10 codes' });
+        }
+      });
 
-// ==================== SCHEDULER: APPOINTMENT REMINDERS ====================
-const checkAppointmentReminders = async () => {
-  try {
-    console.log('⏰ Checking for appointment reminders...');
+      // ==================== SCHEDULER: APPOINTMENT REMINDERS ====================
+      const checkAppointmentReminders = async () => {
+        try {
+          console.log('⏰ Checking for appointment reminders...');
 
-    // Find appointments in the next 24 hours that haven't had a reminder sent
-    const result = await pool.query(
-      `SELECT * FROM appointments 
+          // Find appointments in the next 24 hours that haven't had a reminder sent
+          const result = await pool.query(
+            `SELECT * FROM appointments 
              WHERE scheduled_at BETWEEN NOW() AND NOW() + INTERVAL '24 hours'
              AND (reminder_sent IS NULL OR reminder_sent = false)
              AND status = 'CONFIRMED'`
-    );
+          );
 
-    if (result.rows.length > 0) {
-      console.log(`Found ${result.rows.length} appointments needing reminders.`);
+          if (result.rows.length > 0) {
+            console.log(`Found ${result.rows.length} appointments needing reminders.`);
 
-      for (const apt of result.rows) {
-        // Mock sending reminder (SMS/Email)
-        console.log(`🔔 SENT REMINDER: Appointment for Patient ${apt.patient_id} at ${apt.scheduled_at}`);
+            for (const apt of result.rows) {
+              // Mock sending reminder (SMS/Email)
+              console.log(`🔔 SENT REMINDER: Appointment for Patient ${apt.patient_id} at ${apt.scheduled_at}`);
 
-        // Mark reminder as sent
-        await pool.query(
-          `UPDATE appointments SET reminder_sent = true WHERE id = $1`,
-          [apt.id]
-        );
+              // Mark reminder as sent
+              await pool.query(
+                `UPDATE appointments SET reminder_sent = true WHERE id = $1`,
+                [apt.id]
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Error checking reminders:', error);
+        }
+      };
+
+
+      // Run scheduler every 10 minutes (600000 ms) and once on startup
+      setInterval(checkAppointmentReminders, 600000);
+      setTimeout(checkAppointmentReminders, 5000); // Initial check after 5s
+
+      if (require.main === module) {
+        app.listen(PORT, () => {
+          console.log(`Server is running on port ${PORT}`);
+        });
       }
-    }
-  } catch (error) {
-    console.error('Error checking reminders:', error);
-  }
-};
 
-
-// Run scheduler every 10 minutes (600000 ms) and once on startup
-setInterval(checkAppointmentReminders, 600000);
-setTimeout(checkAppointmentReminders, 5000); // Initial check after 5s
-
-if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-  });
-}
-
-// Export for Vercel
-module.exports = app;
+      // Export for Vercel
+      module.exports = app;

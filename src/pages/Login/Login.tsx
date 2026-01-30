@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff, Heart, Shield, Users, Activity, Loader2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
+import { Button } from '../../components/ui/Button';
+import { Card } from '../../components/ui/Card';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -11,7 +11,7 @@ export const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
-  
+
   const { login, loading } = useAuth();
 
   const validateForm = () => {
@@ -36,7 +36,7 @@ export const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('🔧 [Login] Form submitted');
-    
+
     if (!validateForm()) {
       console.log('❌ [Login] Form validation failed');
       return;
@@ -45,23 +45,23 @@ export const Login: React.FC = () => {
     console.log('🔧 [Login] Form validation passed, attempting login...');
     console.log('🔧 [Login] Email:', email);
     console.log('🔧 [Login] Password length:', password.length);
-    
+
     try {
       const result = await login({ email, password });
       console.log('🔧 [Login] Login result:', result);
-      
+
       if (!result.success) {
         console.error('❌ [Login] Login failed:', result.error);
-        setErrors({ 
-          general: result.error || 'Login failed. Please check your credentials and try again.' 
+        setErrors({
+          general: result.error || 'Login failed. Please check your credentials and try again.'
         });
       } else {
         console.log('✅ [Login] Login successful! Auth context should handle redirect.');
       }
     } catch (error) {
       console.error('❌ [Login] Login exception:', error);
-      setErrors({ 
-        general: 'An unexpected error occurred. Please try again.' 
+      setErrors({
+        general: 'An unexpected error occurred. Please try again.'
       });
     }
     // Navigation will be handled automatically by AuthContext state change
@@ -106,7 +106,7 @@ export const Login: React.FC = () => {
               </div>
             </div>
             <p className="text-lg text-gray-700 mb-8">
-              Streamline your healthcare operations with our comprehensive management platform. 
+              Streamline your healthcare operations with our comprehensive management platform.
               Manage patients, appointments, and more in one integrated solution.
             </p>
           </div>
@@ -168,9 +168,8 @@ export const Login: React.FC = () => {
                     setEmail(e.target.value);
                     if (errors.email) setErrors({ ...errors, email: undefined });
                   }}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                    errors.email ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${errors.email ? 'border-red-300' : 'border-gray-300'
+                    }`}
                   placeholder="Enter your email"
                   disabled={loading}
                 />
@@ -199,9 +198,8 @@ export const Login: React.FC = () => {
                       setPassword(e.target.value);
                       if (errors.password) setErrors({ ...errors, password: undefined });
                     }}
-                    className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      errors.password ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${errors.password ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     placeholder="Enter your password"
                     disabled={loading}
                   />

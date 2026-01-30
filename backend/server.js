@@ -970,9 +970,9 @@ app.post('/api/transactions', authenticateToken, async (req, res) => {
         amount || 0,
         payment_mode || 'CASH',
         doctor_id,
-        doctor_name,
-        department,
-        description,
+        doctor_name || 'Unassigned',
+        department || 'General',
+        description || `${transaction_type || 'CONSULTATION'} - ${doctor_name || 'Unassigned'}`,
         transaction_date || new Date(),
         req.user.id
       ]

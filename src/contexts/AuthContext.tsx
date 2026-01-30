@@ -190,7 +190,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
 
     try {
-      const { error } = await authService.updateProfile(user.id, updates);
+      const { error } = await authService.updateProfile(user.id, updates as any);
 
       if (error) {
         return { success: false, error };

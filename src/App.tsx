@@ -44,6 +44,11 @@ import TransactionDateDebugger from './components/TransactionDateDebugger'; // T
 
 // Main App Component
 const App: React.FC = () => {
+  // HARD DEBUG: Check Supabase Env Vars
+  console.log('⚡ [HARD DEBUG] Supabase URL:', import.meta.env.VITE_SUPABASE_URL);
+  console.log('⚡ [HARD DEBUG] Supabase Key:', import.meta.env.VITE_SUPABASE_ANON_KEY);
+  console.log('⚡ [HARD DEBUG] Full Env:', import.meta.env);
+
   const { user, loading, isAdmin } = useAuth();
 
   // Simple console initialization
@@ -72,6 +77,24 @@ const App: React.FC = () => {
       });
     };
     console.log('✅✅✅ [v2] Global sendEmailFromPopup function registered at', new Date().toISOString());
+
+    // 🧪 FAST TRIAGE: Test Supabase Connectivity
+    import('./lib/supabaseClient').then(({ supabase }) => {
+      console.log('🧪 [TRIAGE] Testing Supabase Connectivity...');
+      supabase
+        .from('patients')
+        .select('*')
+        .limit(1)
+        .then(({ data, error }) => {
+          if (error) {
+            console.error('❌ [TRIAGE] Supabase Connection FAILED:', error);
+          } else {
+            console.log('✅ [TRIAGE] Supabase Connection SUCCESS. Data:', data);
+          }
+        })
+        .catch(err => console.error('❌ [TRIAGE] Unexpected Error:', err));
+    });
+
   }, []);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isNavVisible, setIsNavVisible] = useState(true);

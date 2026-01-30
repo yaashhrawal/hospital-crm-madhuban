@@ -64,18 +64,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         let currentUser = await authService.getCurrentUser();
         logger.log('🔧 [AuthContext] Current user result:', currentUser);
 
-        // DEVELOPMENT BYPASS: If no user found, force login as admin
-        if (!currentUser) {
-          console.log('🔓 [DEV] Auto-logging in as Admin (Frontend Bypass)');
-          currentUser = {
-            id: 'dev-bypass-admin',
-            email: 'admin@hospital.com',
-            firstName: 'Admin',
-            lastName: 'User',
-            role: 'ADMIN',
-            isActive: true
-          };
-        }
+        // DEVELOPMENT BYPASS: Removed to enable Login Page
+        // if (!currentUser) { ... }
 
         setUser(currentUser);
         logger.log('🔧 [AuthContext] User state set to:', currentUser);
@@ -89,16 +79,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }
       } catch (error) {
         logger.error('❌ [AuthContext] Error initializing auth:', error);
-        // Even on error, try to bypass
-        const bypassUser = {
-          id: 'dev-bypass-admin',
-          email: 'admin@hospital.com',
-          firstName: 'Admin',
-          lastName: 'User',
-          role: 'ADMIN',
-          isActive: true
-        };
-        setUser(bypassUser);
+        setUser(null);
       } finally {
         setLoading(false);
         logger.log('🔧 [AuthContext] Loading set to false');

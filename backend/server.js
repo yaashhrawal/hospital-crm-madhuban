@@ -9,6 +9,8 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Force Vercel redeploy - Updated: 2026-01-30
+
 // Middleware
 app.use(cors());
 // Increase body size limit to 50MB to support base64 image uploads

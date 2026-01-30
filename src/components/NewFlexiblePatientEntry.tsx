@@ -752,60 +752,8 @@ const NewFlexiblePatientEntry: React.FC = () => {
           selected_department: formData.selected_department
         });
 
-        // DIRECT SUPABASE BYPASS (Fixes Network/500 Errors)
-        // Using direct REST API instead of Supabase client library
-
-        // Auto-generate patient_id locally (since backend is bypassed)
-        // Use timestamp + random string for guaranteed uniqueness
-        const timestampId = `M${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-        // 🧪 DEBUG: Sending MINIMAL Data first to isolate the error
-        // We are excluding photo_url and hospital_id temporarily
-        const minimalPayload = {
-          patient_id: timestampId,
-          first_name: patientData.first_name,
-          last_name: patientData.last_name,
-          gender: patientData.gender,
-          phone: patientData.phone,
-          age: patientData.age?.toString() || '0', // Ensure string
-          date_of_entry: new Date().toISOString(), // Ensure valid timestamp
-          queue_no: Math.floor(Math.random() * 100),
-          created_by: '00000000-0000-0000-0000-000000000000',
-          is_active: true
-        };
-
-        console.log('🚀 [REST API] Inserting via direct REST:', minimalPayload);
-
-        const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-        const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        try {
-          const response = await fetch(`${SUPABASE_URL}/rest/v1/patients`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
-              'Prefer': 'return=representation'
-            },
-            body: JSON.stringify(minimalPayload)
-          });
-
-          console.log('📡 Response status:', response.status);
-          const responseText = await response.text();
-          console.log('📡 Response body:', responseText);
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${responseText}`);
-          }
-
-          newPatient = JSON.parse(responseText)[0];
-
-        } catch (error: any) {
-          console.error('❌ [REST API] Error:', error);
-          throw new Error(`REST API Error: ${error.message}`);
-        }
-        // newPatient = await HospitalService.createPatient(patientData);
+        // Use backend API for patient creation
+        newPatient = await HospitalService.createPatient(patientData);
         logger.log('✅ Patient created successfully (Direct Mode):', newPatient);
       }
 

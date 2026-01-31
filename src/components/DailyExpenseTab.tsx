@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { supabase } from '../config/supabaseNew';
+import axios from 'axios';
 import HospitalService from '../services/hospitalService';
+
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return { Authorization: `Bearer ${token}` };
+};
+
+const getBaseUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:3002';
 
 interface DailyExpense {
   id?: string;
@@ -57,22 +65,19 @@ const DailyExpenseTab: React.FC = () => {
   const loadExpenses = async () => {
     setLoadingExpenses(true);
     try {
-      const { data, error } = await supabase
-        .from('daily_expenses')
-        .select('*')
-        .eq('expense_date', selectedDate)
-        .order('created_at', { ascending: false });
+      const response = await axios.get(`${getBaseUrl()}/api/daily_expenses`, {
+        headers: getAuthHeaders(),
+        params: { date: selectedDate }
+      });
 
-      if (error) {
-        console.error('Error loading expenses:', error);
-        toast.error('Failed to load expenses');
-        return;
-      }
-
-      setExpenses(data || []);
+      setExpenses(response.data || []);
     } catch (error: any) {
       console.error('Error loading expenses:', error);
-      toast.error(`Failed to load expenses: ${error.message}`);
+      // Don't show error toast for empty results
+      if (error.response?.status !== 404) {
+        toast.error(`Failed to load expenses: ${error.message}`);
+      }
+      setExpenses([]);
     } finally {
       setLoadingExpenses(false);
     }
@@ -89,27 +94,24 @@ const DailyExpenseTab: React.FC = () => {
     setLoading(true);
 
     try {
-      const expenseData: Partial<DailyExpense> = {
+      const expenseData = {
         expense_category: formData.expense_category === 'custom' ? formData.custom_category.toUpperCase() : formData.expense_category,
         description: formData.description.trim(),
         amount: formData.amount,
         payment_mode: formData.payment_mode,
         expense_date: formData.expense_date,
-        receipt_number: formData.receipt_number.trim() || `RCP${Date.now()}`,
-        hospital_id: '550e8400-e29b-41d4-a716-446655440000'
+        notes: formData.notes || ''
       };
 
       console.log('💰 Creating expense with data:', expenseData);
 
-      const { data, error } = await supabase
-        .from('daily_expenses')
-        .insert([expenseData])
-        .select()
-        .single();
+      const response = await axios.post(`${getBaseUrl()}/api/daily_expenses`, expenseData, {
+        headers: getAuthHeaders()
+      });
 
-      if (error) {
-        console.error('Error creating expense:', error);
-        toast.error(`Failed to record expense: ${error.message}`);
+      if (!response.data || response.data.error) {
+        console.error('Error creating expense:', response.data?.error);
+        toast.error(`Failed to record expense: ${response.data?.error || 'Unknown error'}`);
         return;
       }
 
@@ -146,16 +148,9 @@ const DailyExpenseTab: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('daily_expenses')
-        .delete()
-        .eq('id', expenseId);
-
-      if (error) {
-        console.error('Error deleting expense:', error);
-        toast.error('Failed to delete expense');
-        return;
-      }
+      await axios.delete(`${getBaseUrl()}/api/daily_expenses/${expenseId}`, {
+        headers: getAuthHeaders()
+      });
 
       toast.success('Expense deleted successfully');
       loadExpenses();

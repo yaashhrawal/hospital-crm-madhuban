@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { supabase } from '../config/supabaseNew';
+import axios from 'axios';
 import { exportToExcel, formatCurrency, formatDateTime } from '../utils/excelExport';
 import ModernDatePicker from './ui/ModernDatePicker';
 import { ExactDateService } from '../services/exactDateService';
+
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('auth_token');
+  return { Authorization: `Bearer ${token}` };
+};
+
+const getBaseUrl = () => import.meta.env.VITE_API_URL || 'http://localhost:3002';
 
 // Function to convert UTC database time to actual local system time
 const formatLocalTime = (dateTime: Date | string): string => {
@@ -286,17 +294,20 @@ const OperationsLedger: React.FC = () => {
           });
         });
 
-      // Load daily expenses
-      const { data: expenses, error: expError } = await supabase
-        .from('daily_expenses')
-        .select('*')
-        .gte('expense_date', dateFrom)
-        .lte('expense_date', dateTo)
-        .order('expense_date', { ascending: false });
-
-      if (expError) {
+      // Load daily expenses from backend API
+      let expenses: any[] = [];
+      try {
+        const expenseResponse = await axios.get(`${getBaseUrl()}/api/daily_expenses`, {
+          headers: getAuthHeaders(),
+          params: { start_date: dateFrom, end_date: dateTo }
+        });
+        expenses = expenseResponse.data || [];
+        console.log(`✅ Loaded ${expenses.length} expenses from backend`);
+      } catch (expError) {
         console.error('Error loading expenses:', expError);
-      } else if (expenses) {
+      }
+
+      if (expenses && expenses.length > 0) {
         expenses.forEach((expense: any) => {
           const expenseDate = new Date(expense.expense_date);
           const expenseDateTime = new Date(expense.created_at);

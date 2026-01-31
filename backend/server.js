@@ -2219,19 +2219,35 @@ app.get('/api/icd10', async (req, res) => {
 
 // ==================== DAILY EXPENSES ROUTES ====================
 
-// Get daily expenses by date
+// Get daily expenses with date range filter
 app.get('/api/daily_expenses', authenticateToken, async (req, res) => {
   try {
-    const { date } = req.query;
+    const { date, start_date, end_date } = req.query;
+    let query = 'SELECT * FROM daily_expenses';
+    const params = [];
+    let paramCount = 1;
 
-    if (!date) {
-      return res.status(400).json({ error: 'Date parameter is required' });
+    if (start_date && end_date) {
+      query += ` WHERE expense_date >= $${paramCount} AND expense_date <= $${paramCount + 1}`;
+      params.push(start_date, end_date);
+      paramCount += 2;
+    } else if (date) {
+      query += ` WHERE expense_date = $${paramCount}`;
+      params.push(date);
+      paramCount++;
     }
 
-    // Return empty array for now (can be implemented later with actual table)
-    res.json([]);
+    query += ' ORDER BY expense_date DESC, created_at DESC';
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
   } catch (error) {
     console.error('Error fetching daily expenses:', error);
+    // If table doesn't exist, return empty array
+    if (error.code === '42P01') {
+      console.log('daily_expenses table does not exist, returning empty array');
+      return res.json([]);
+    }
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
@@ -2239,10 +2255,86 @@ app.get('/api/daily_expenses', authenticateToken, async (req, res) => {
 // Create daily expense
 app.post('/api/daily_expenses', authenticateToken, async (req, res) => {
   try {
-    // Return success for now (can be implemented later with actual table)
-    res.json({ message: 'Expense tracking coming soon' });
+    const {
+      expense_date,
+      expense_category,
+      description,
+      amount,
+      payment_mode,
+      approved_by,
+      notes
+    } = req.body;
+
+    const result = await pool.query(
+      `INSERT INTO daily_expenses (
+        expense_date, expense_category, description, amount,
+        payment_mode, approved_by, notes, created_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *`,
+      [
+        expense_date || new Date().toISOString().split('T')[0],
+        expense_category || 'GENERAL',
+        description || '',
+        amount || 0,
+        (payment_mode || 'cash').toLowerCase(),
+        approved_by || req.user.email,
+        notes || '',
+        req.user.id
+      ]
+    );
+
+    console.log('✅ Daily expense created:', result.rows[0].id);
+    res.json(result.rows[0]);
   } catch (error) {
     console.error('Error creating expense:', error);
+    // If table doesn't exist, create it first
+    if (error.code === '42P01') {
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS daily_expenses (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            expense_date DATE NOT NULL DEFAULT CURRENT_DATE,
+            expense_category VARCHAR(100),
+            description TEXT,
+            amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+            payment_mode VARCHAR(50) DEFAULT 'cash',
+            approved_by VARCHAR(255),
+            notes TEXT,
+            created_by UUID,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        // Retry the insert
+        const { expense_date, expense_category, description, amount, payment_mode, approved_by, notes } = req.body;
+        const result = await pool.query(
+          `INSERT INTO daily_expenses (expense_date, expense_category, description, amount, payment_mode, approved_by, notes, created_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+          [expense_date || new Date().toISOString().split('T')[0], expense_category || 'GENERAL', description || '', amount || 0, (payment_mode || 'cash').toLowerCase(), approved_by || req.user.email, notes || '', req.user.id]
+        );
+        return res.json(result.rows[0]);
+      } catch (createError) {
+        console.error('Error creating table and expense:', createError);
+        return res.status(500).json({ error: 'Server error', details: createError.message });
+      }
+    }
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Delete daily expense
+app.delete('/api/daily_expenses/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM daily_expenses WHERE id = $1 RETURNING *', [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Expense not found' });
+    }
+
+    res.json({ message: 'Expense deleted successfully', deleted: result.rows[0] });
+  } catch (error) {
+    console.error('Error deleting expense:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });

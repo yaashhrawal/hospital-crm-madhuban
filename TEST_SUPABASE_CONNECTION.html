@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Supabase Connection Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Supabase Connection Test</h1>
+    <button onclick="testConnection()">Test Connection</button>
+    <button onclick="testInsert()">Test Insert</button>
+    <pre id="output"></pre>
+
+    <script>
+        const SUPABASE_URL = 'https://tkwafahuwhkzdraqojfj.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_nt56vc9qCE66G4qI6K2mgQ_Ana6-oFA';
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        function log(message) {
+            document.getElementById('output').textContent += message + '\n';
+            console.log(message);
+        }
+
+        async function testConnection() {
+            document.getElementById('output').textContent = '';
+            log('Testing Supabase connection...');
+            
+            try {
+                const { data, error } = await supabase
+                    .from('patients')
+                    .select('*')
+                    .limit(1);
+                
+                if (error) {
+                    log('❌ Connection Error: ' + JSON.stringify(error, null, 2));
+                } else {
+                    log('✅ Connection SUCCESS!');
+                    log('Data: ' + JSON.stringify(data, null, 2));
+                }
+            } catch (err) {
+                log('❌ Exception: ' + err.message);
+                log('Full error: ' + JSON.stringify(err, null, 2));
+            }
+        }
+
+        async function testInsert() {
+            document.getElementById('output').textContent = '';
+            log('Testing Supabase insert...');
+            
+            const testData = {
+                patient_id: 'TEST' + Date.now(),
+                first_name: 'Test',
+                last_name: 'Patient',
+                gender: 'MALE',
+                phone: '1234567890',
+                age: '30',
+                date_of_entry: new Date().toISOString(),
+                queue_no: 1,
+                created_by: '00000000-0000-0000-0000-000000000000',
+                is_active: true
+            };
+            
+            log('Payload: ' + JSON.stringify(testData, null, 2));
+            
+            try {
+                const { data, error } = await supabase
+                    .from('patients')
+                    .insert(testData)
+                    .select()
+                    .single();
+                
+                if (error) {
+                    log('❌ Insert Error: ' + JSON.stringify(error, null, 2));
+                } else {
+                    log('✅ Insert SUCCESS!');
+                    log('Inserted data: ' + JSON.stringify(data, null, 2));
+                }
+            } catch (err) {
+                log('❌ Exception: ' + err.message);
+                log('Full error: ' + JSON.stringify(err, null, 2));
+            }
+        }
+    </script>
+</body>
+</html>

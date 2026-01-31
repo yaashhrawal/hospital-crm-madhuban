@@ -70,6 +70,13 @@ const DailyOperationsView: React.FC = () => {
 
   // Load all data for the selected date
   const loadDailyOperations = async () => {
+    // SAFEGUARD: Ensure selectedDate is valid before proceeding
+    if (!selectedDate) {
+      console.warn('⚠️ selectedDate is null/undefined, skipping data load');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       // Load data - transactions already filtered at database level

@@ -857,7 +857,7 @@ app.get('/api/patient_refunds', authenticateToken, async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
     let query = `
-      SELECT r.*, 
+      SELECT r.*,
              json_build_object(
                'id', p.id,
                'patient_id', p.patient_id,
@@ -895,6 +895,11 @@ app.get('/api/patient_refunds', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching refunds:', error);
+    // If table doesn't exist, return empty array
+    if (error.code === '42P01') {
+      console.log('patient_refunds table does not exist, returning empty array');
+      return res.json([]);
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });

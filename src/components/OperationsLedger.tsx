@@ -105,7 +105,14 @@ const OperationsLedger: React.FC = () => {
       const allEntries: LedgerEntry[] = [];
 
       // Use same data source as Patient List
-      const patientsData = await ExactDateService.getPatientsForDateRange(dateFrom, dateTo);
+      let patientsData: any[] = [];
+      try {
+        patientsData = await ExactDateService.getPatientsForDateRange(dateFrom, dateTo);
+        console.log(`✅ Loaded ${patientsData.length} patients for operations ledger`);
+      } catch (patientError: any) {
+        console.error('Error loading patients for ledger:', patientError);
+        // Continue with empty patients - we can still show expenses
+      }
 
       // Extract all transactions from all patients
       const allTransactions: any[] = [];
@@ -474,7 +481,12 @@ const OperationsLedger: React.FC = () => {
       setEntries(allEntries);
     } catch (error: any) {
       console.error('Error loading ledger:', error);
-      toast.error('Failed to load ledger entries');
+      console.error('Error details:', {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status
+      });
+      toast.error(`Failed to load ledger: ${error?.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }

@@ -11,8 +11,26 @@ const PORT = process.env.PORT || 3001;
 
 // Force Vercel redeploy - Updated: 2026-01-30
 
+// CORS Configuration - Allow frontend domains
+const corsOptions = {
+  origin: [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://hospital-crm-madhuban-frontend.vercel.app',
+    'https://hospital-crm-madhuban.vercel.app',
+    /\.vercel\.app$/  // Allow all Vercel preview deployments
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
+
+// Handle preflight requests explicitly
+app.options('*', cors(corsOptions));
+
 // Increase body size limit to 50MB to support base64 image uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));

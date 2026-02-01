@@ -9,38 +9,40 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Force Vercel redeploy - Updated: 2026-01-30
+// Force Vercel redeploy - Updated: 2026-02-01 CORS FIX v3
 
-// Manual CORS headers for Vercel serverless compatibility
-app.use((req, res, next) => {
-  const allowedOrigins = [
-    'http://localhost:3000',
-    'http://localhost:5173',
-    'https://hospital-crm-madhuban-frontend.vercel.app',
-    'https://hospital-crm-madhuban.vercel.app'
-  ];
+// CORS Configuration - Single unified approach for Vercel serverless
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, postman)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || (origin && origin.endsWith('.vercel.app'))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
+    // Allow all Vercel preview/production deployments
+    if (origin.endsWith('.vercel.app')) {
+      return callback(null, true);
+    }
 
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+    // Allow localhost for development
+    if (origin.includes('localhost')) {
+      return callback(null, true);
+    }
 
-  // Handle preflight
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+    // Allow any origin (for maximum compatibility)
+    return callback(null, true);
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200 // Some legacy browsers choke on 204
+};
 
-  next();
-});
+// Apply CORS middleware FIRST - before any routes
+app.use(cors(corsOptions));
 
-// Also use cors middleware as backup
-app.use(cors());
+// Explicit OPTIONS handler for preflight requests (Vercel serverless compatibility)
+app.options('*', cors(corsOptions));
 
 // Increase body size limit to 50MB to support base64 image uploads
 app.use(express.json({ limit: '50mb' }));

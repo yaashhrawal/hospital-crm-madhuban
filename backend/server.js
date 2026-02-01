@@ -11,25 +11,36 @@ const PORT = process.env.PORT || 3001;
 
 // Force Vercel redeploy - Updated: 2026-01-30
 
-// CORS Configuration - Allow frontend domains
-const corsOptions = {
-  origin: [
+// Manual CORS headers for Vercel serverless compatibility
+app.use((req, res, next) => {
+  const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
     'https://hospital-crm-madhuban-frontend.vercel.app',
-    'https://hospital-crm-madhuban.vercel.app',
-    /\.vercel\.app$/  // Allow all Vercel preview deployments
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-};
+    'https://hospital-crm-madhuban.vercel.app'
+  ];
 
-// Middleware
-app.use(cors(corsOptions));
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin) || (origin && origin.endsWith('.vercel.app'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
 
-// Handle preflight requests explicitly
-app.options('*', cors(corsOptions));
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Handle preflight
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+// Also use cors middleware as backup
+app.use(cors());
 
 // Increase body size limit to 50MB to support base64 image uploads
 app.use(express.json({ limit: '50mb' }));

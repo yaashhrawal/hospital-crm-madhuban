@@ -107,10 +107,18 @@ const OperationsLedger: React.FC = () => {
       // Fetch transactions directly by date range (with patient info)
       let allTransactions: any[] = [];
       try {
-        const transResponse = await axios.get(`${getBaseUrl()}/api/transactions/for-ledger`, {
+        const apiUrl = `${getBaseUrl()}/api/transactions/for-ledger`;
+        console.log('🔍 Operations Ledger - Fetching from:', apiUrl);
+        console.log('🔍 Operations Ledger - Date range:', { start_date: dateFrom, end_date: dateTo });
+
+        const transResponse = await axios.get(apiUrl, {
           headers: getAuthHeaders(),
           params: { start_date: dateFrom, end_date: dateTo }
         });
+
+        console.log('🔍 Operations Ledger - Response status:', transResponse.status);
+        console.log('🔍 Operations Ledger - Response data:', transResponse.data);
+
         const rawTransactions = transResponse.data || [];
         console.log(`✅ Loaded ${rawTransactions.length} transactions for operations ledger`);
 
@@ -304,6 +312,7 @@ const OperationsLedger: React.FC = () => {
       });
 
       // Load daily expenses from backend API
+      console.log('🔍 Operations Ledger - Loading expenses...');
       let expenses: any[] = [];
       try {
         const expenseResponse = await axios.get(`${getBaseUrl()}/api/daily_expenses`, {

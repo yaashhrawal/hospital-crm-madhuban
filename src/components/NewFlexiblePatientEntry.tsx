@@ -517,6 +517,14 @@ const NewFlexiblePatientEntry: React.FC = () => {
     }
   }, [tempDepartment]);
 
+  // Auto-select RGHS payment mode if patient tag is RGHS
+  useEffect(() => {
+    if (formData.patient_tag && formData.patient_tag.toUpperCase().includes('RGHS')) {
+      logger.log('🔄 Auto-selecting RGHS payment mode based on patient tag');
+      setFormData(prev => ({ ...prev, payment_mode: 'RGHS' }));
+    }
+  }, [formData.patient_tag]);
+
   const handleSubmit = async (e: React.FormEvent, saveAsDraft: boolean = false) => {
     e.preventDefault();
     setLoading(true);
@@ -1722,6 +1730,30 @@ const NewFlexiblePatientEntry: React.FC = () => {
                   )}
                 </div>
 
+                {/* RGHS Number Field - Moved below Aadhaar as requested */}
+                <div className="mb-4">
+                  <label style={{ display: 'block', fontSize: '14px', color: '#333333', marginBottom: '6px', fontWeight: '500' }}>
+                    RGHS Number <span style={{ fontSize: '12px', color: '#666', fontWeight: '400' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.rghs_number || ''}
+                    onChange={(e) => setFormData({ ...formData, rghs_number: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #CCCCCC',
+                      fontSize: '16px',
+                      color: '#333333',
+                      outline: 'none'
+                    }}
+                    placeholder="Enter RGHS Number"
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0056B3'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
+                  />
+                </div>
+
                 {/* Date Fields */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div>
@@ -2365,30 +2397,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
                       <option value="RGHS">RGHS</option>
                     </select>
                   </div>
-                  {formData.payment_mode === 'RGHS' && (
-                    <div>
-                      <label style={{ display: 'block', fontSize: '14px', color: '#333333', marginBottom: '6px', fontWeight: '500' }}>
-                        RGHS Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.rghs_number || ''}
-                        onChange={(e) => setFormData({ ...formData, rghs_number: e.target.value })}
-                        style={{
-                          width: '100%',
-                          padding: '10px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #CCCCCC',
-                          fontSize: '16px',
-                          color: '#333333',
-                          outline: 'none'
-                        }}
-                        placeholder="Enter RGHS Number"
-                        onFocus={(e) => e.currentTarget.style.borderColor = '#0056B3'}
-                        onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
-                      />
-                    </div>
-                  )}
+                  {/* RGHS Number input moved to Personal Information section */}
                   {formData.payment_mode === 'ONLINE' && (
                     <div>
                       <label style={{ display: 'block', fontSize: '14px', color: '#333333', marginBottom: '6px', fontWeight: '500' }}>

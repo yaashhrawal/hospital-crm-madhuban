@@ -164,6 +164,14 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
     }
   };
 
+  // Auto-select RGHS payment mode if patient tag is RGHS
+  useEffect(() => {
+    if (patient && patient.patient_tag && patient.patient_tag.toUpperCase().includes('RGHS')) {
+      console.log('🔄 Auto-selecting RGHS payment mode for service based on patient tag');
+      setNewService(prev => ({ ...prev, paymentMode: 'RGHS' }));
+    }
+  }, [patient]);
+
   const getFilteredServices = () => {
     return MEDICAL_SERVICES.filter(s => s.category === selectedCategory);
   };
@@ -238,7 +246,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
         payment_mode: newService.paymentMode,
         status: 'COMPLETED' as const,
         transaction_date: finalServiceDate, // 🔍 CRITICAL FIX: Set actual transaction_date field
-        discount_type: 'PERCENTAGE', // Store discount type for receipt calculation
+        discount_type: 'PERCENTAGE' as 'PERCENTAGE' | 'AMOUNT', // Store discount type for receipt calculation
         discount_value: newService.discount || 0, // Store discount value
         doctor_name: newService.doctorName || null, // Save the selected doctor name
         rghs_number: newService.rghsNumber || null // Save RGHS number

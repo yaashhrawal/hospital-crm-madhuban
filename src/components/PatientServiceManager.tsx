@@ -4,6 +4,7 @@ import HospitalService from '../services/hospitalService';
 import toast from 'react-hot-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { DOCTOR_DEGREES } from '../data/doctorDegrees';
+import { MEDICAL_SERVICES_DATA } from '../data/medicalServices';
 import { useAuth } from '../contexts/AuthContext';
 
 interface PatientServiceManagerProps {
@@ -27,44 +28,8 @@ interface ServiceItem {
   rghsNumber?: string; // RGHS Card Number
 }
 
-// Predefined medical services catalog
-const MEDICAL_SERVICES = [
-  // Lab Tests
-  { name: 'Blood Test - CBC', category: 'LAB_TEST' as const, defaultPrice: 200 },
-  { name: 'Blood Sugar Test', category: 'LAB_TEST' as const, defaultPrice: 100 },
-  { name: 'Liver Function Test', category: 'LAB_TEST' as const, defaultPrice: 400 },
-  { name: 'Kidney Function Test', category: 'LAB_TEST' as const, defaultPrice: 450 },
-  { name: 'Lipid Profile', category: 'LAB_TEST' as const, defaultPrice: 350 },
-  { name: 'Thyroid Test', category: 'LAB_TEST' as const, defaultPrice: 500 },
-  { name: 'Urine Test', category: 'LAB_TEST' as const, defaultPrice: 150 },
-  { name: 'ECG', category: 'LAB_TEST' as const, defaultPrice: 150 },
+// Services loaded from external data file
 
-  // X-Ray & Imaging
-  { name: 'X-Ray Chest', category: 'XRAY' as const, defaultPrice: 300 },
-  { name: 'X-Ray Abdomen', category: 'XRAY' as const, defaultPrice: 350 },
-  { name: 'X-Ray Spine', category: 'XRAY' as const, defaultPrice: 400 },
-  { name: 'Ultrasound Abdomen', category: 'XRAY' as const, defaultPrice: 800 },
-  { name: 'CT Scan', category: 'XRAY' as const, defaultPrice: 3000 },
-  { name: 'MRI', category: 'XRAY' as const, defaultPrice: 5000 },
-
-  // Procedures
-  { name: 'Dressing', category: 'PROCEDURE' as const, defaultPrice: 150 },
-  { name: 'Injection', category: 'PROCEDURE' as const, defaultPrice: 50 },
-  { name: 'Nebulization', category: 'PROCEDURE' as const, defaultPrice: 200 },
-  { name: 'Suture Removal', category: 'PROCEDURE' as const, defaultPrice: 200 },
-  { name: 'Catheterization', category: 'PROCEDURE' as const, defaultPrice: 500 },
-
-  // Common Medicines
-  { name: 'Paracetamol', category: 'MEDICINE' as const, defaultPrice: 10 },
-  { name: 'Antibiotics', category: 'MEDICINE' as const, defaultPrice: 50 },
-  { name: 'Pain Killer', category: 'MEDICINE' as const, defaultPrice: 30 },
-  { name: 'IV Fluids', category: 'MEDICINE' as const, defaultPrice: 200 },
-
-  // Other Services
-  { name: 'Ambulance Service', category: 'SERVICE' as const, defaultPrice: 500 },
-  { name: 'Oxygen', category: 'SERVICE' as const, defaultPrice: 300 },
-  { name: 'Wheelchair', category: 'SERVICE' as const, defaultPrice: 100 },
-];
 
 const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
   patient,
@@ -85,7 +50,8 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
     doctorName: patient.assigned_doctor || '', // Default to patient's assigned doctor
     rghsNumber: ''
   });
-  const [selectedCategory, setSelectedCategory] = useState<ServiceItem['category']>('LAB_TEST');
+  // Removed category state as we now use a global search
+  const [searchTerm, setSearchTerm] = useState('');
   const [isCustomService, setIsCustomService] = useState(false);
   const [loading, setLoading] = useState(false);
   const [existingTransactions, setExistingTransactions] = useState<PatientTransaction[]>([]);
@@ -172,21 +138,27 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
     }
   }, [patient]);
 
-  const getFilteredServices = () => {
-    return MEDICAL_SERVICES.filter(s => s.category === selectedCategory);
-  };
-
   const handleServiceSelect = (serviceName: string) => {
-    const selectedService = MEDICAL_SERVICES.find(s => s.name === serviceName);
+    // Determine if typing or selecting
+    setNewService(prev => ({ ...prev, name: serviceName }));
+    setSearchTerm(serviceName);
+
+    const selectedService = MEDICAL_SERVICES_DATA.find(s => s.name === serviceName);
     if (selectedService) {
-      setNewService({
-        ...newService,
+      setNewService(prev => ({
+        ...prev,
         name: selectedService.name,
         category: selectedService.category,
         price: selectedService.defaultPrice,
         discount: 0
-      });
+      }));
+      // Indicate not custom if matched
       setIsCustomService(false);
+    } else {
+      // If typing something new, keep it as is (custom implicit)
+      // defaulting category to SERVICE if not set, or keep previous logic
+      setNewService(prev => ({ ...prev, category: 'SERVICE' })); // Default for new entries
+      setIsCustomService(true);
     }
   };
 
@@ -279,7 +251,7 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
       // Reset form
       setNewService({
         name: '',
-        category: selectedCategory,
+        category: 'SERVICE',
         price: 0,
         quantity: 1,
         discount: 0,
@@ -452,74 +424,30 @@ const PatientServiceManager: React.FC<PatientServiceManagerProps> = ({
           <div className="p-4 bg-gray-50 border-b">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">Add New Service</h3>
 
-            {/* Category Selection */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
-              {(['LAB_TEST', 'XRAY', 'PROCEDURE', 'MEDICINE', 'SERVICE'] as const).map(category => (
-                <button
-                  key={category}
-                  onClick={() => {
-                    setSelectedCategory(category);
-                    setNewService({ ...newService, category });
-                  }}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors ${selectedCategory === category
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-white text-gray-700 border hover:bg-gray-100'
-                    }`}
-                >
-                  {category.replace('_', ' ')}
-                </button>
-              ))}
-            </div>
-
+            {/* Service Selection - Unified Searchable Dropdown */}
             <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-              {/* Service Selection/Input */}
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Service Name
+                  Service Name / Search
                 </label>
-                {!isCustomService ? (
-                  <div className="flex gap-2">
-                    <select
-                      value={newService.name}
-                      onChange={(e) => handleServiceSelect(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="">Select Service</option>
-                      {getFilteredServices().map(service => (
-                        <option key={service.name} value={service.name}>
-                          {service.name} - ₹{service.defaultPrice}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={() => setIsCustomService(true)}
-                      className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                      title="Add custom service"
-                    >
-                      ✏️
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newService.name}
-                      onChange={(e) => setNewService({ ...newService, name: e.target.value })}
-                      placeholder="Enter custom service name"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button
-                      onClick={() => {
-                        setIsCustomService(false);
-                        setNewService({ ...newService, name: '' });
-                      }}
-                      className="px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                      title="Select from list"
-                    >
-                      📋
-                    </button>
-                  </div>
-                )}
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="medical-services-list"
+                    value={newService.name}
+                    onChange={(e) => handleServiceSelect(e.target.value)}
+                    placeholder="Search or type service name..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    autoComplete="off"
+                  />
+                  <datalist id="medical-services-list">
+                    {MEDICAL_SERVICES_DATA.map((service, index) => (
+                      <option key={`${service.name}-${index}`} value={service.name}>
+                        {service.name} - ₹{service.defaultPrice} ({service.category})
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
               {/* Price */}

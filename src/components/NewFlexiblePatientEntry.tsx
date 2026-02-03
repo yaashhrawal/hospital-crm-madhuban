@@ -18,6 +18,10 @@ import {
 } from 'lucide-react';
 import HospitalService from '../services/hospitalService';
 import SMSService from '../services/smsService';
+
+// DEBUG: Define User to catch ReferenceErrors
+const User = () => <div style={{ color: 'red' }}>HIDDEN USER COMPONENT FOUND</div>;
+
 import { PatientService } from '../services/patientService';
 import { appointmentService } from '../services/appointmentService';
 import DoctorService from '../services/doctorService';

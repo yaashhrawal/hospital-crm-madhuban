@@ -94,7 +94,7 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
   // Filter doctors when department changes
   useEffect(() => {
     if (formData.selected_department) {
-      const filtered = DOCTORS_DATA.filter(doc => 
+      const filtered = DOCTORS_DATA.filter(doc =>
         doc.department === formData.selected_department
       );
       setFilteredDoctors(filtered);
@@ -107,14 +107,14 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
   useEffect(() => {
     if (isOpen && patient.transactions) {
       // Filter for entry fee and consultation transactions (initial payments)
-      const initialPayments = patient.transactions.filter((t: any) => 
-        t.transaction_type === 'ENTRY_FEE' || 
+      const initialPayments = patient.transactions.filter((t: any) =>
+        t.transaction_type === 'ENTRY_FEE' ||
         t.transaction_type === 'entry_fee' ||
         t.transaction_type === 'CONSULTATION' ||
         t.transaction_type === 'consultation'
       );
       setExistingPayments(initialPayments);
-      
+
       // If there are existing payments, pre-fill the first one
       if (initialPayments.length > 0) {
         const firstPayment = initialPayments[0];
@@ -267,17 +267,17 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
 
     const finalDoctorName = formData.selected_doctor === 'CUSTOM' ? formData.custom_doctor_name : formData.selected_doctor;
     const finalDepartmentName = formData.selected_department === 'CUSTOM' ? formData.custom_department_name : formData.selected_department;
-    
+
     if (!finalDoctorName && !finalDepartmentName) {
       toast.error('Please select a doctor or department');
       return;
     }
-    
+
     if (formData.selected_doctor === 'CUSTOM' && !formData.custom_doctor_name) {
       toast.error('Please enter custom doctor name');
       return;
     }
-    
+
     if (formData.selected_department === 'CUSTOM' && !formData.custom_department_name) {
       toast.error('Please enter custom department name');
       return;
@@ -293,31 +293,28 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
 
       console.log('💰 Updating transaction for patient:', patient.id);
 
-      const transactionDescription = paymentData.description || 
-        `${paymentData.transaction_type === 'CONSULTATION' ? 'Consultation Fee' : 
+      const transactionDescription = paymentData.description ||
+        `${paymentData.transaction_type === 'CONSULTATION' ? 'Consultation Fee' :
           paymentData.transaction_type === 'LAB_TEST' ? 'Lab Test' :
-          paymentData.transaction_type === 'XRAY' ? 'X-Ray' :
-          paymentData.transaction_type === 'MEDICINE' ? 'Medicine' :
-          paymentData.transaction_type === 'PROCEDURE' ? 'Procedure' :
-          'Service'}${finalDoctorName ? ` - ${finalDoctorName}` : ''}${finalDepartmentName ? ` (${finalDepartmentName})` : ''}${paymentData.discount_reason ? ` | Reason: ${paymentData.discount_reason}` : ''}`;
+            paymentData.transaction_type === 'XRAY' ? 'X-Ray' :
+              paymentData.transaction_type === 'MEDICINE' ? 'Medicine' :
+                paymentData.transaction_type === 'PROCEDURE' ? 'Procedure' :
+                  'Service'}${finalDoctorName ? ` - ${finalDoctorName}` : ''}${finalDepartmentName ? ` (${finalDepartmentName})` : ''}${paymentData.discount_reason ? ` | Reason: ${paymentData.discount_reason}` : ''}`;
 
       if (selectedPaymentId) {
         // Update existing transaction
-        const { error } = await supabase
-          .from('patient_transactions')
-          .update({
-            transaction_type: paymentData.transaction_type,
-            description: transactionDescription,
-            amount: finalAmount,
-            payment_mode: paymentData.payment_mode === 'ONLINE' ? paymentData.online_payment_method : paymentData.payment_mode,
-            doctor_name: finalDoctorName,
-            department: finalDepartmentName,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', selectedPaymentId);
-        
-        if (error) {
-          throw error;
+        const updatedTransaction = await HospitalService.updateTransaction(selectedPaymentId, {
+          transaction_type: paymentData.transaction_type as any,
+          description: transactionDescription,
+          amount: finalAmount,
+          payment_mode: paymentData.payment_mode === 'ONLINE' ? paymentData.online_payment_method : paymentData.payment_mode,
+          doctor_name: finalDoctorName,
+          department: finalDepartmentName,
+          // transaction_date is not updated here, preserving original or adding if needed
+        });
+
+        if (!updatedTransaction) {
+          throw new Error('Failed to update transaction');
         }
         toast.success(`Payment updated successfully! ₹${finalAmount.toFixed(2)}`);
       } else {
@@ -333,11 +330,11 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
           hospital_id: '550e8400-e29b-41d4-a716-446655440000',
           created_by: 'system'
         };
-        
+
         await HospitalService.createTransaction(mainTransaction as any);
         toast.success(`Payment added successfully! ₹${finalAmount.toFixed(2)}`);
       }
-      
+
       // Refresh parent
       onPatientUpdated();
 
@@ -453,7 +450,7 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
           }
         `
       }} />
-      
+
       <div className="bg-white rounded-lg max-w-7xl w-full max-h-[90vh] overflow-auto" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif' }}>
         {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-gray-200">
@@ -527,9 +524,9 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
                         const nameParts = fullName.trim().split(' ');
                         const firstName = nameParts[0] || '';
                         const lastName = nameParts.slice(1).join(' ') || '';
-                        
-                        setFormData({ 
-                          ...formData, 
+
+                        setFormData({
+                          ...formData,
                           full_name: fullName,
                           first_name: firstName,
                           last_name: lastName
@@ -957,7 +954,7 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
                       ))}
                       <option value="CUSTOM">Custom Department</option>
                     </select>
-                    
+
                     {/* Custom Department Input */}
                     {formData.selected_department === 'CUSTOM' && (
                       <div style={{ marginTop: '8px' }}>
@@ -1009,7 +1006,7 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
                       ))}
                       <option value="CUSTOM">Custom Doctor</option>
                     </select>
-                    
+
                     {/* Custom Doctor Input */}
                     {formData.selected_doctor === 'CUSTOM' && (
                       <div style={{ marginTop: '8px' }}>
@@ -1084,9 +1081,9 @@ const EditPatientModal: React.FC<EditPatientModalProps> = ({
                         <option value="">Select a payment to edit</option>
                         {existingPayments.map((payment: any) => (
                           <option key={payment.id} value={payment.id}>
-                            {payment.transaction_type === 'entry_fee' || payment.transaction_type === 'ENTRY_FEE' ? 'Entry Fee' : 'Consultation'} - 
-                            ₹{payment.amount} - 
-                            {payment.doctor_name || 'No Doctor'} - 
+                            {payment.transaction_type === 'entry_fee' || payment.transaction_type === 'ENTRY_FEE' ? 'Entry Fee' : 'Consultation'} -
+                            ₹{payment.amount} -
+                            {payment.doctor_name || 'No Doctor'} -
                             {new Date(payment.created_at).toLocaleDateString()}
                           </option>
                         ))}

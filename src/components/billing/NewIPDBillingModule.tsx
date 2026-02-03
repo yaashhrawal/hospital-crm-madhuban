@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import HospitalService from '../../services/hospitalService';
 import { supabase, HOSPITAL_ID } from '../../config/supabaseNew';
 import type { PatientWithRelations } from '../../config/supabaseNew';
-import { MEDICAL_SERVICES, searchServices, type MedicalService } from '../../data/medicalServices';
+import { MEDICAL_SERVICES_DATA, searchServices, type MedicalService } from '../../data/medicalServices';
 import { logger } from '../../utils/logger';
 import BillingService, { type IPDBill } from '../../services/billingService';
 
@@ -217,7 +217,7 @@ const NewIPDBillingModule: React.FC = () => {
   const [showServiceDropdown, setShowServiceDropdown] = useState(false);
   const [customServiceName, setCustomServiceName] = useState('');
   const [customServiceAmount, setCustomServiceAmount] = useState('');
-  const [availableServices, setAvailableServices] = useState<MedicalService[]>(MEDICAL_SERVICES);
+  const [availableServices, setAvailableServices] = useState<MedicalService[]>(MEDICAL_SERVICES_DATA);
 
   // Stay Segment Management
   const [_staySegments, _setStaySegments] = useState([{
@@ -640,7 +640,7 @@ const NewIPDBillingModule: React.FC = () => {
         id: `custom_${Date.now()}`,
         name: customServiceName.trim(),
         code: `CUSTOM-${Date.now()}`,
-        category: 'PROCEDURES',
+        category: 'PROCEDURE',
         department: 'Custom Services',
         description: `Custom service: ${customServiceName.trim()}`,
         basePrice: parseFloat(customServiceAmount),
@@ -704,8 +704,8 @@ const NewIPDBillingModule: React.FC = () => {
     return selectedServices
       .filter(service => service.selected)
       .reduce((total, service) => {
-        const amount = parseFloat(service.amount) || 0;
-        const quantity = parseInt(service.quantity) || 1;
+        const amount = service.amount || 0;
+        const quantity = service.quantity || 1;
         return total + (isNaN(amount) ? 0 : amount * quantity);
       }, 0);
   };
@@ -1453,11 +1453,11 @@ const NewIPDBillingModule: React.FC = () => {
 
   const calculateSummary = () => {
     // Use the same calculation system as the main bill display
-    const admissionAmount = parseFloat(admissionFee) || 0;
+    const admissionAmount = admissionFee || 0;
     const stayChargesAmount = calculateTotalStayCharges();
     const servicesAmount = calculateSelectedServicesTotal();
-    const discountAmount = parseFloat(discount) || 0;
-    const taxAmount = parseFloat(tax) || 0;
+    const discountAmount = discount || 0;
+    const taxAmount = tax || 0;
 
     const totalBill = admissionAmount + stayChargesAmount + servicesAmount;
     const netAfterDiscountAndTax = Math.max(0, totalBill - discountAmount + taxAmount);
@@ -2646,14 +2646,14 @@ const NewIPDBillingModule: React.FC = () => {
               <h3 style="color: black; font-size: 18px; font-weight: bold; margin-bottom: 15px; border-bottom: 1px solid #ddd; padding-bottom: 8px;">PATIENT DETAILS</h3>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                 <div>
-                  <p style="color: black; margin: 6px 0;"><strong>NAME:</strong> ${bill.patients?.first_name || ''} ${bill.patients?.last_name || ''}</p>
-                  <p style="color: black; margin: 6px 0;"><strong>AGE/SEX:</strong> ${bill.patients?.age || 'N/A'} years / ${bill.patients?.gender || 'N/A'}</p>
-                  <p style="color: black; margin: 6px 0;"><strong>MOBILE:</strong> ${bill.patients?.phone || 'N/A'}</p>
+                  <p style="color: black; margin: 6px 0;"><strong>NAME:</strong> ${selectedPatient?.first_name || ''} ${selectedPatient?.last_name || ''}</p>
+                  <p style="color: black; margin: 6px 0;"><strong>AGE/SEX:</strong> ${selectedPatient?.age || 'N/A'} years / ${selectedPatient?.gender || 'N/A'}</p>
+                  <p style="color: black; margin: 6px 0;"><strong>MOBILE:</strong> ${selectedPatient?.phone || 'N/A'}</p>
                 </div>
                 <div>
-                  <p style="color: black; margin: 6px 0;"><strong>PATIENT ID:</strong> ${bill.patients?.patient_id || 'N/A'}</p>
-                  <p style="color: black; margin: 6px 0;"><strong>ADMISSION DATE:</strong> ${bill.patients?.admissions?.[0]?.admission_date ? new Date(bill.patients.admissions[0].admission_date).toLocaleDateString('en-IN') : 'N/A'}</p>
-                  <p style="color: black; margin: 6px 0;"><strong>ROOM/BED:</strong> ${bill.patients?.admissions?.[0]?.bed_number || 'N/A'}</p>
+                  <p style="color: black; margin: 6px 0;"><strong>PATIENT ID:</strong> ${selectedPatient?.patient_id || 'N/A'}</p>
+                  <p style="color: black; margin: 6px 0;"><strong>ADMISSION DATE:</strong> ${selectedPatient?.admissions?.[0]?.admission_date ? new Date(selectedPatient.admissions[0].admission_date).toLocaleDateString('en-IN') : 'N/A'}</p>
+                  <p style="color: black; margin: 6px 0;"><strong>ROOM/BED:</strong> ${selectedPatient?.admissions?.[0]?.bed_id || 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -4186,7 +4186,7 @@ const NewIPDBillingModule: React.FC = () => {
                         </div>
                         <div className="bg-blue-100 p-4 rounded-lg border border-blue-300">
                           <div className="text-sm text-blue-700">Grand Total</div>
-                          <div className="text-xl font-bold text-blue-800">₹{((parseFloat(admissionFee) || 0) + calculateTotalStayCharges() + calculateSelectedServicesTotal()).toFixed(2)}</div>
+                          <div className="text-xl font-bold text-blue-800">₹{((admissionFee || 0) + calculateTotalStayCharges() + calculateSelectedServicesTotal()).toFixed(2)}</div>
                         </div>
                       </div>
 
@@ -4232,7 +4232,7 @@ const NewIPDBillingModule: React.FC = () => {
                             <div className="text-lg font-semibold text-blue-800">Net Payable Amount</div>
                             <div className="text-sm text-blue-600">After discount and additional charges</div>
                           </div>
-                          <div className="text-3xl font-bold text-blue-800">₹{((parseFloat(admissionFee) || 0) + calculateTotalStayCharges() + calculateSelectedServicesTotal() - (parseFloat(discount) || 0) + (parseFloat(tax) || 0)).toFixed(2)}</div>
+                          <div className="text-3xl font-bold text-blue-800">₹{((admissionFee || 0) + calculateTotalStayCharges() + calculateSelectedServicesTotal() - (discount || 0) + (tax || 0)).toFixed(2)}</div>
                         </div>
                       </div>
                     </div>
@@ -4316,7 +4316,7 @@ const NewIPDBillingModule: React.FC = () => {
               ) : filteredPatients.length > 0 ? (
                 filteredPatients.map((patient) => {
                   const latestAdmission = patient.admissions?.[0];
-                  const isAdmitted = latestAdmission && !latestAdmission.discharge_date;
+                  const isAdmitted = latestAdmission && !latestAdmission.actual_discharge_date;
 
                   return (
                     <div
@@ -4366,11 +4366,11 @@ const NewIPDBillingModule: React.FC = () => {
                                 {patient.assigned_doctor && (
                                   <div><span className="font-medium">Doctor:</span> {patient.assigned_doctor}</div>
                                 )}
-                                {latestAdmission.admission_type && (
-                                  <div><span className="font-medium">Type:</span> {latestAdmission.admission_type}</div>
+                                {patient.ipd_status && (
+                                  <div><span className="font-medium">Type:</span> {patient.ipd_status}</div>
                                 )}
-                                {latestAdmission.chief_complaint && (
-                                  <div><span className="font-medium">Complaint:</span> {latestAdmission.chief_complaint}</div>
+                                {latestAdmission.admission_notes && (
+                                  <div><span className="font-medium">Complaint:</span> {latestAdmission.admission_notes}</div>
                                 )}
                               </div>
                             </div>
@@ -4394,7 +4394,7 @@ const NewIPDBillingModule: React.FC = () => {
                   <div className="mt-4 space-y-2">
                     {patients.slice(0, 10).map((patient) => {
                       const latestAdmission = patient.admissions?.[0];
-                      const isAdmitted = latestAdmission && !latestAdmission.discharge_date;
+                      const isAdmitted = latestAdmission && !latestAdmission.actual_discharge_date;
 
                       return (
                         <div

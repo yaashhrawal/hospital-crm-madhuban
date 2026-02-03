@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import type { PatientWithRelations } from '../config/supabaseNew';
 import { getDoctorWithDegree } from '../data/doctorDegrees';
 import { supabase } from '../config/supabaseNew';
-import { MEDICAL_SERVICES, type MedicalService } from '../data/medicalServices';
+import { MEDICAL_SERVICES_DATA, type MedicalService } from '../data/medicalServices';
 import * as CompletePatientRecordService from '../services/completePatientRecordService';
 import MedicineDropdown from './MedicineDropdown';
 
@@ -27,7 +27,7 @@ interface PrescriptionData {
 const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => {
   const [templateLoaded, setTemplateLoaded] = useState(false);
   const [templateError, setTemplateError] = useState(false);
-  const [doctorDetails, setDoctorDetails] = useState<{specialty?: string, hospital_experience?: string}>({});
+  const [doctorDetails, setDoctorDetails] = useState<{ specialty?: string, hospital_experience?: string }>({});
   const [showTypingInterface, setShowTypingInterface] = useState(false);
   const [prescriptionData, setPrescriptionData] = useState<PrescriptionData>({
     chiefComplaints: {
@@ -55,14 +55,14 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
     console.log('🏥 VH assigned_department:', patient.assigned_department);
     console.log('📋 VH Current doctorDetails state:', doctorDetails);
     console.log('🔍 VH Transaction details:', (patient as any).transaction_details);
-    
+
     // Use enhanced doctor fields from transaction-specific data first
     const doctorName = patient.assigned_doctor || (patient as any).doctor_name || 'DR. BATUL PEEPAWALA';
     const transactionDegree = (patient as any).doctor_degree;
     const transactionSpecialization = (patient as any).doctor_specialization;
-    
+
     const localDoctorInfo = getDoctorWithDegree(doctorName);
-    
+
     // Prioritize transaction-specific degree, then local degree, then database specialty
     let degree = '';
     if (transactionDegree && transactionDegree.trim()) {
@@ -75,7 +75,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
       degree = doctorDetails.specialty;
       console.log('✅ VH Using database specialty as degree:', degree);
     }
-    
+
     const result = {
       name: localDoctorInfo.name,
       degree: degree,
@@ -90,17 +90,17 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
   const getDepartmentName = () => {
     // Prioritize transaction-specific department over patient's assigned department
     let dept = patient.assigned_department || 'GENERAL PHYSICIAN';
-    
+
     console.log('🏥 VH Department resolution:', {
       patient_assigned_department: patient.assigned_department,
       final_department: dept
     });
-    
+
     // Fix any ORTHOPEDIC spelling issues
     if (dept.toUpperCase().includes('ORTHOPEDIC')) {
       dept = dept.replace(/ORTHOPEDIC/gi, 'ORTHOPAEDIC');
     }
-    
+
     console.log('🏥 VH FINAL department:', dept);
     return dept;
   };
@@ -110,12 +110,12 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
     if ((patient as any).currentTransactionAmount !== undefined) {
       return (patient as any).currentTransactionAmount;
     }
-    
+
     // Otherwise, show total of all completed transactions (original behavior)
     if (!patient.transactions || patient.transactions.length === 0) {
       return 0;
     }
-    
+
     return patient.transactions
       .filter(transaction => transaction.status === 'COMPLETED')
       .reduce((total, transaction) => total + transaction.amount, 0);
@@ -160,35 +160,35 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
       if (patient.assigned_department) {
         try {
           console.log('🔍 VH Searching for department:', patient.assigned_department);
-          
+
           // Simple exact match query first
           const { data: departments, error } = await supabase
             .from('departments')
             .select('name, specialty, hospital_experience')
             .eq('name', patient.assigned_department);
-          
+
           console.log('📋 VH Department query result:', departments);
           console.log('📋 VH Query error:', error);
-          
+
           if (departments && departments.length > 0) {
             const department = departments[0];
             console.log('✅ VH Found department data:', department);
-            
+
             const newDetails = {
               specialty: department.specialty || '',
               hospital_experience: department.hospital_experience || ''
             };
-            
+
             console.log('📋 VH Setting new state:', newDetails);
             setDoctorDetails(newDetails);
-            
+
             // Force re-render
             setTimeout(() => {
               console.log('📋 VH State after update:', newDetails);
             }, 100);
           } else {
             console.log('❌ VH No exact match, trying partial match');
-            
+
             // Try alternative spelling for ORTHOPEDIC/ORTHOPAEDIC
             let searchTerm = patient.assigned_department;
             if (patient.assigned_department === 'ORTHOPEDIC') {
@@ -196,16 +196,16 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             } else if (patient.assigned_department === 'ORTHOPAEDIC') {
               searchTerm = 'ORTHOPEDIC';
             }
-            
+
             console.log('🔍 VH Trying alternative spelling:', searchTerm);
-            
+
             const { data: altDepts, error: altError } = await supabase
               .from('departments')
               .select('name, specialty, hospital_experience')
               .eq('name', searchTerm);
-            
+
             console.log('📋 VH Alternative spelling result:', altDepts);
-            
+
             if (altDepts && altDepts.length > 0) {
               const department = altDepts[0];
               setDoctorDetails({
@@ -219,9 +219,9 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
                 .from('departments')
                 .select('name, specialty, hospital_experience')
                 .ilike('name', `%${patient.assigned_department}%`);
-              
+
               console.log('📋 VH Partial match result:', partialDepts);
-              
+
               if (partialDepts && partialDepts.length > 0) {
                 const department = partialDepts[0];
                 setDoctorDetails({
@@ -232,13 +232,13 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
               }
             }
           }
-          
+
         } catch (error) {
           console.error('❌ VH Database error:', error);
         }
       }
     };
-    
+
     fetchDepartmentDetails();
   }, [patient.assigned_department]);
 
@@ -251,40 +251,40 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
         // Load data from Complete Patient Record database
         const savedPatientRecord = await CompletePatientRecordService.getCompletePatientRecord(patient.patient_id);
         console.log('📡 VH Service returned:', !!savedPatientRecord, savedPatientRecord ? 'with data' : 'null');
-        
+
         if (savedPatientRecord) {
           console.log('✅ VH Found Complete Patient Record data in database:', savedPatientRecord);
           console.log('🔍 VH High Risk Data:', savedPatientRecord.highRisk);
           console.log('🔍 VH High Risk Structure:', savedPatientRecord.highRisk ? Object.keys(savedPatientRecord.highRisk) : 'null');
-          
+
           // Map Complete Patient Record data to VH prescription format - COMPREHENSIVE MAPPING
           const mappedChiefComplaints = { painComplaint: '', location: '', duration: '' };
           let mappedHistoryOfPresentIllness = '';
           let mappedInvestigations: string[] = [];
           let mappedMedicinePrescribed: string[] = [];
-          
+
           // Build comprehensive history section with ALL Complete Patient Record data
           const historySections = [];
-          
+
           // 1. CHIEF COMPLAINTS SECTION
           if (savedPatientRecord.chiefComplaints && savedPatientRecord.chiefComplaints.length > 0) {
-            const complaintsText = savedPatientRecord.chiefComplaints.map((complaint, index) => 
+            const complaintsText = savedPatientRecord.chiefComplaints.map((complaint, index) =>
               `${index + 1}. ${complaint.complaint} (${complaint.period || complaint.duration || 'Unknown duration'}) - ${complaint.presentHistory || complaint.notes || 'No additional details'}`
             ).join('\n');
             historySections.push(`CHIEF COMPLAINTS:\n${complaintsText}`);
-            
+
             // Also map to the specific chief complaints fields
             const firstComplaint = savedPatientRecord.chiefComplaints[0];
             mappedChiefComplaints.painComplaint = firstComplaint.complaint || '';
             mappedChiefComplaints.duration = firstComplaint.duration || firstComplaint.period || '';
             mappedChiefComplaints.location = firstComplaint.location || '';
           }
-          
+
           // 2. HIGH RISK DATA SECTION
           console.log('🔍 VH Processing high risk data...', !!savedPatientRecord.highRisk);
           if (savedPatientRecord.highRisk) {
             console.log('📊 VH High Risk Details:', savedPatientRecord.highRisk);
-            
+
             const highRiskDetails = [];
             if (savedPatientRecord.highRisk.risk_factors?.length > 0) {
               highRiskDetails.push(`Risk Factors: ${savedPatientRecord.highRisk.risk_factors.join(', ')}`);
@@ -310,12 +310,12 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             if (savedPatientRecord.highRisk.notes) {
               highRiskDetails.push(`Notes: ${savedPatientRecord.highRisk.notes}`);
             }
-            
+
             if (highRiskDetails.length > 0) {
               historySections.push(`HIGH RISK CONDITIONS & MEDICAL HISTORY:\n${highRiskDetails.join('\n')}`);
             }
           }
-          
+
           // 3. EXAMINATION DATA SECTION
           if (savedPatientRecord.examination) {
             const examDetails = [];
@@ -328,12 +328,12 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             if (savedPatientRecord.examination.respiratory_examination) examDetails.push(`Respiratory: ${savedPatientRecord.examination.respiratory_examination}`);
             if (savedPatientRecord.examination.abdominal_examination) examDetails.push(`Abdominal: ${savedPatientRecord.examination.abdominal_examination}`);
             if (savedPatientRecord.examination.musculoskeletal_examination) examDetails.push(`Musculoskeletal: ${savedPatientRecord.examination.musculoskeletal_examination}`);
-            
+
             if (examDetails.length > 0) {
               historySections.push(`EXAMINATION FINDINGS:\n${examDetails.join('\n')}`);
             }
           }
-          
+
           // 4. DIAGNOSIS DATA SECTION
           if (savedPatientRecord.diagnosis) {
             const diagnosisDetails = [];
@@ -343,15 +343,15 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             if (savedPatientRecord.diagnosis.icd_codes) diagnosisDetails.push(`ICD Codes: ${savedPatientRecord.diagnosis.icd_codes}`);
             if (savedPatientRecord.diagnosis.confidence_level) diagnosisDetails.push(`Confidence Level: ${savedPatientRecord.diagnosis.confidence_level}`);
             if (savedPatientRecord.diagnosis.notes) diagnosisDetails.push(`Diagnosis Notes: ${savedPatientRecord.diagnosis.notes}`);
-            
+
             if (diagnosisDetails.length > 0) {
               historySections.push(`DIAGNOSIS:\n${diagnosisDetails.join('\n')}`);
             }
           }
-          
+
           // Combine all sections into the history field
           mappedHistoryOfPresentIllness = historySections.join('\n\n═══════════════════\n\n');
-          
+
           // Map Investigations comprehensively - include ALL investigation types
           if (savedPatientRecord.investigation) {
             const investigations = [];
@@ -364,7 +364,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             if (savedPatientRecord.investigation.interpretation) investigations.push(`Interpretation: ${savedPatientRecord.investigation.interpretation}`);
             mappedInvestigations = investigations.filter(inv => inv && inv.trim());
           }
-          
+
           // Map Prescriptions comprehensively - include ALL medication details
           if (savedPatientRecord.prescription?.medications && savedPatientRecord.prescription.medications.length > 0) {
             mappedMedicinePrescribed = savedPatientRecord.prescription.medications.map((med: any, index: number) => {
@@ -378,7 +378,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
               if (med.route) parts.push(`- Route: ${med.route}`);
               return parts.join(' ');
             }).filter(med => med.trim());
-            
+
             // Also add prescription instructions if available
             if (savedPatientRecord.prescription.dosage_instructions) {
               mappedMedicinePrescribed.push(`\nDosage Instructions: ${savedPatientRecord.prescription.dosage_instructions}`);
@@ -390,7 +390,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
               mappedMedicinePrescribed.push(`Follow-up Date: ${savedPatientRecord.prescription.follow_up_date}`);
             }
           }
-          
+
           // Build comprehensive reference section
           const referenceDetails = [];
           if (savedPatientRecord.diagnosis?.primary_diagnosis) referenceDetails.push(`Primary Diagnosis: ${savedPatientRecord.diagnosis.primary_diagnosis}`);
@@ -398,7 +398,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
           if (savedPatientRecord.investigation?.interpretation) referenceDetails.push(`Investigation Notes: ${savedPatientRecord.investigation.interpretation}`);
           if (savedPatientRecord.summary?.summary) referenceDetails.push(`Summary: ${savedPatientRecord.summary.summary}`);
           const mappedReference = referenceDetails.join('\n') || '';
-          
+
           setPrescriptionData({
             chiefComplaints: mappedChiefComplaints,
             historyOfPresentIllness: mappedHistoryOfPresentIllness,
@@ -406,7 +406,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             reference: mappedReference,
             medicinePrescribed: mappedMedicinePrescribed
           });
-          
+
           console.log('📋 VH Final mapped data:', {
             chiefComplaintsCount: mappedChiefComplaints ? 1 : 0,
             historyLength: mappedHistoryOfPresentIllness.length,
@@ -415,19 +415,19 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
             medicinesCount: mappedMedicinePrescribed.length,
             historySections: historySections.length
           });
-          
+
           toast.success('✅ VH: Loaded ALL Complete Patient Record sections!');
           console.log('✅ VH: Successfully mapped ALL Complete Patient Record sections to prescription format');
         } else {
           console.log('ℹ️ VH: No Complete Patient Record found for patient:', patient.patient_id);
         }
-        
+
       } catch (error) {
         console.error('❌ VH: Error loading Complete Patient Record:', error);
         toast.error('VH: Error loading Complete Patient Record data');
       }
     };
-    
+
     loadPatientRecordData();
   }, [patient.patient_id]);
 
@@ -439,12 +439,12 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
     const ageText = patient.age && patient.age.trim() !== '' ? `${patient.age} years` : 'N/A';
     const genderText = patient.gender === 'MALE' ? 'M' : patient.gender === 'FEMALE' ? 'F' : patient.gender;
     const totalPaid = getTotalPaidAmount();
-    
+
     // Check if this is a transaction-specific prescription
     const isTransactionSpecific = (patient as any).currentTransactionAmount !== undefined;
     const transactionType = isTransactionSpecific ? (patient as any).currentTransactionType : '';
     const transactionDate = isTransactionSpecific ? (patient as any).currentTransactionDate : '';
-    
+
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -788,7 +788,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
           }
         `
       }} />
-      
+
       <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-auto">
         {/* Print, Type, and Close buttons */}
         <div className="flex justify-end gap-2 p-4 border-b print:hidden">
@@ -816,7 +816,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
         {showTypingInterface && (
           <div className="p-6 border-b bg-gray-50 print:hidden">
             <h3 className="text-lg font-semibold mb-4 text-gray-800">Prescription Details</h3>
-            
+
             {/* Chief Complaints Section */}
             <div className="mb-6">
               <h4 className="text-md font-medium mb-3 text-gray-700">1. Chief Complaints</h4>
@@ -893,7 +893,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Investigation/Service...</option>
-                  {MEDICAL_SERVICES
+                  {MEDICAL_SERVICES_DATA
                     .filter(service => service.isActive)
                     .map(service => (
                       <option key={service.id} value={service.name}>
@@ -902,7 +902,7 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
                     ))
                   }
                 </select>
-                
+
                 {/* Selected Investigations */}
                 {prescriptionData.investigation.length > 0 && (
                   <div className="mt-2">
@@ -998,158 +998,158 @@ const VHPrescription: React.FC<VHPrescriptionProps> = ({ patient, onClose }) => 
 
         {/* Prescription Content */}
         {(templateLoaded || !templateError) && (
-          <div 
-            id="prescription-content" 
+          <div
+            id="prescription-content"
             className="relative w-full h-[842px] bg-cover bg-center bg-no-repeat print:w-[297mm] print:h-[420mm]"
-            style={{ 
+            style={{
               backgroundImage: `url(${templatePaths[currentTemplateIndex]})`,
               backgroundSize: '100% 100%',
               backgroundPosition: 'center'
             }}
           >
 
-          {/* Patient Details */}
-          <div className="absolute top-64 left-12">
-            {/* Row 1: Name and Age/Sex */}
-            <div className="flex mb-3">
-              <div className="flex items-center whitespace-nowrap">
-                <span className="text-lg font-medium text-gray-700">Name:</span>
-                <span className="text-xl font-medium text-gray-900 ml-2">
-                  {patient.prefix ? `${patient.prefix} ` : ''}{patient.first_name} {patient.last_name}
+            {/* Patient Details */}
+            <div className="absolute top-64 left-12">
+              {/* Row 1: Name and Age/Sex */}
+              <div className="flex mb-3">
+                <div className="flex items-center whitespace-nowrap">
+                  <span className="text-lg font-medium text-gray-700">Name:</span>
+                  <span className="text-xl font-medium text-gray-900 ml-2">
+                    {patient.prefix ? `${patient.prefix} ` : ''}{patient.first_name} {patient.last_name}
+                  </span>
+                </div>
+                <div className="flex items-center whitespace-nowrap ml-52">
+                  <span className="text-lg font-medium text-gray-700">Age/Sex:</span>
+                  <span className="text-xl text-gray-900 ml-2">
+                    {patient.age && patient.age.trim() !== '' ? `${patient.age} years` : 'N/A'} / {patient.gender === 'MALE' ? 'M' : patient.gender === 'FEMALE' ? 'F' : patient.gender}
+                  </span>
+                </div>
+              </div>
+
+              {/* Row 2: Patient No and Department */}
+              <div className="flex">
+                <div className="flex items-center whitespace-nowrap">
+                  <span className="text-lg font-medium text-gray-700">Patient No:</span>
+                  <span className="text-xl text-gray-900 ml-2">{patient.patient_id}</span>
+                </div>
+                <div className="flex items-center whitespace-nowrap ml-52">
+                  <span className="text-lg font-medium text-gray-700">Department:</span>
+                  <span className="text-xl text-gray-900 ml-2">{getDepartmentName()}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Date and Paid Amount - Right Side */}
+            <div className="absolute top-64 right-0 mr-12 space-y-3 text-right">
+              {/* Date */}
+              <div className="flex items-center justify-end">
+                <span className="text-lg font-medium text-gray-700 mr-2">Date:</span>
+                <span className="text-xl text-gray-900">{getCurrentDate()}</span>
+              </div>
+
+              {/* Paid Amount */}
+              <div className="flex items-center justify-end">
+                <span className="text-lg font-medium text-gray-700 mr-2">Paid Amount:</span>
+                <span className="text-xl font-semibold text-green-600">
+                  ₹{getTotalPaidAmount().toLocaleString()}
                 </span>
               </div>
-              <div className="flex items-center whitespace-nowrap ml-52">
-                <span className="text-lg font-medium text-gray-700">Age/Sex:</span>
-                <span className="text-xl text-gray-900 ml-2">
-                  {patient.age && patient.age.trim() !== '' ? `${patient.age} years` : 'N/A'} / {patient.gender === 'MALE' ? 'M' : patient.gender === 'FEMALE' ? 'F' : patient.gender}
-                </span>
-              </div>
             </div>
 
-            {/* Row 2: Patient No and Department */}
-            <div className="flex">
-              <div className="flex items-center whitespace-nowrap">
-                <span className="text-lg font-medium text-gray-700">Patient No:</span>
-                <span className="text-xl text-gray-900 ml-2">{patient.patient_id}</span>
-              </div>
-              <div className="flex items-center whitespace-nowrap ml-52">
-                <span className="text-lg font-medium text-gray-700">Department:</span>
-                <span className="text-xl text-gray-900 ml-2">{getDepartmentName()}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Date and Paid Amount - Right Side */}
-          <div className="absolute top-64 right-0 mr-12 space-y-3 text-right">
-            {/* Date */}
-            <div className="flex items-center justify-end">
-              <span className="text-lg font-medium text-gray-700 mr-2">Date:</span>
-              <span className="text-xl text-gray-900">{getCurrentDate()}</span>
-            </div>
-
-            {/* Paid Amount */}
-            <div className="flex items-center justify-end">
-              <span className="text-lg font-medium text-gray-700 mr-2">Paid Amount:</span>
-              <span className="text-xl font-semibold text-green-600">
-                ₹{getTotalPaidAmount().toLocaleString()}
-              </span>
-            </div>
-          </div>
-
-          {/* Prescription Content Area */}
-          <div className="absolute top-96 left-12 right-12 bottom-[26rem] overflow-hidden">
-            {/* Chief Complaints */}
-            {(prescriptionData.chiefComplaints.painComplaint || prescriptionData.chiefComplaints.location || prescriptionData.chiefComplaints.duration) && (
-              <div className="mb-8">
-                <div className="text-2xl font-bold text-gray-800 mb-4">Chief Complaints:</div>
-                <div className="text-lg text-gray-700 space-y-3">
-                  {prescriptionData.chiefComplaints.painComplaint && (
-                    <div><span className="font-bold">Pain:</span> {prescriptionData.chiefComplaints.painComplaint}</div>
-                  )}
-                  {prescriptionData.chiefComplaints.location && (
-                    <div><span className="font-bold">Location:</span> {prescriptionData.chiefComplaints.location}</div>
-                  )}
-                  {prescriptionData.chiefComplaints.duration && (
-                    <div><span className="font-bold">Duration:</span> {prescriptionData.chiefComplaints.duration}</div>
-                  )}
+            {/* Prescription Content Area */}
+            <div className="absolute top-96 left-12 right-12 bottom-[26rem] overflow-hidden">
+              {/* Chief Complaints */}
+              {(prescriptionData.chiefComplaints.painComplaint || prescriptionData.chiefComplaints.location || prescriptionData.chiefComplaints.duration) && (
+                <div className="mb-8">
+                  <div className="text-2xl font-bold text-gray-800 mb-4">Chief Complaints:</div>
+                  <div className="text-lg text-gray-700 space-y-3">
+                    {prescriptionData.chiefComplaints.painComplaint && (
+                      <div><span className="font-bold">Pain:</span> {prescriptionData.chiefComplaints.painComplaint}</div>
+                    )}
+                    {prescriptionData.chiefComplaints.location && (
+                      <div><span className="font-bold">Location:</span> {prescriptionData.chiefComplaints.location}</div>
+                    )}
+                    {prescriptionData.chiefComplaints.duration && (
+                      <div><span className="font-bold">Duration:</span> {prescriptionData.chiefComplaints.duration}</div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* History of Present Illness */}
-            {prescriptionData.historyOfPresentIllness && (
-              <div className="mb-8">
-                <div className="text-2xl font-bold text-gray-800 mb-4">History of Present Illness:</div>
-                <div className="text-lg text-gray-700 leading-relaxed">{prescriptionData.historyOfPresentIllness}</div>
-              </div>
-            )}
-
-            {/* Investigation */}
-            {prescriptionData.investigation.length > 0 && (
-              <div className="mb-8">
-                <div className="text-2xl font-bold text-gray-800 mb-4">Investigation:</div>
-                <div className="text-lg text-gray-700">
-                  {prescriptionData.investigation.map((item, index) => (
-                    <div key={index} className="mb-2">• {item}</div>
-                  ))}
+              {/* History of Present Illness */}
+              {prescriptionData.historyOfPresentIllness && (
+                <div className="mb-8">
+                  <div className="text-2xl font-bold text-gray-800 mb-4">History of Present Illness:</div>
+                  <div className="text-lg text-gray-700 leading-relaxed">{prescriptionData.historyOfPresentIllness}</div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Reference */}
-            {prescriptionData.reference && (
-              <div className="mb-8">
-                <div className="text-2xl font-bold text-gray-800 mb-4">Reference:</div>
-                <div className="text-lg text-gray-700 leading-relaxed">{prescriptionData.reference}</div>
-              </div>
-            )}
-
-            {/* Medicine Prescribed */}
-            {prescriptionData.medicinePrescribed.length > 0 && (
-              <div className="mb-8">
-                <div className="text-2xl font-bold text-gray-800 mb-4">Medicine Prescribed:</div>
-                <div className="text-lg text-gray-700 leading-relaxed">
-                  {prescriptionData.medicinePrescribed.map((medicine, index) => (
-                    <div key={index} className="mb-2">• {medicine}</div>
-                  ))}
+              {/* Investigation */}
+              {prescriptionData.investigation.length > 0 && (
+                <div className="mb-8">
+                  <div className="text-2xl font-bold text-gray-800 mb-4">Investigation:</div>
+                  <div className="text-lg text-gray-700">
+                    {prescriptionData.investigation.map((item, index) => (
+                      <div key={index} className="mb-2">• {item}</div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
 
-          {/* Doctor Details - Bottom Right Above Signature */}
-          <div className="absolute bottom-[24rem] right-12 text-left max-w-lg">
-            {/* Doctor Name */}
-            <div className="font-bold text-2xl uppercase leading-tight" style={{ fontFamily: 'Canva Sans, sans-serif', color: '#4E1BB2' }}>
-              {getDoctorInfo().name}
+              {/* Reference */}
+              {prescriptionData.reference && (
+                <div className="mb-8">
+                  <div className="text-2xl font-bold text-gray-800 mb-4">Reference:</div>
+                  <div className="text-lg text-gray-700 leading-relaxed">{prescriptionData.reference}</div>
+                </div>
+              )}
+
+              {/* Medicine Prescribed */}
+              {prescriptionData.medicinePrescribed.length > 0 && (
+                <div className="mb-8">
+                  <div className="text-2xl font-bold text-gray-800 mb-4">Medicine Prescribed:</div>
+                  <div className="text-lg text-gray-700 leading-relaxed">
+                    {prescriptionData.medicinePrescribed.map((medicine, index) => (
+                      <div key={index} className="mb-2">• {medicine}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            
-            {/* Doctor Degree */}
-            {getDoctorInfo().degree && (
-              <div className="text-lg mt-1 font-medium text-gray-700" style={{ fontFamily: 'Canva Sans, sans-serif', whiteSpace: 'pre-line' }}>
-                {getDoctorInfo().degree}
+
+            {/* Doctor Details - Bottom Right Above Signature */}
+            <div className="absolute bottom-[24rem] right-12 text-left max-w-lg">
+              {/* Doctor Name */}
+              <div className="font-bold text-2xl uppercase leading-tight" style={{ fontFamily: 'Canva Sans, sans-serif', color: '#4E1BB2' }}>
+                {getDoctorInfo().name}
               </div>
-            )}
-            
-            {/* Department */}
-            <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
-              {getDepartmentName()}
-            </div>
-            
-            {/* Specialty - only show if different from degree */}
-            {getDoctorInfo().specialty && getDoctorInfo().specialty !== getDoctorInfo().degree && (
+
+              {/* Doctor Degree */}
+              {getDoctorInfo().degree && (
+                <div className="text-lg mt-1 font-medium text-gray-700" style={{ fontFamily: 'Canva Sans, sans-serif', whiteSpace: 'pre-line' }}>
+                  {getDoctorInfo().degree}
+                </div>
+              )}
+
+              {/* Department */}
               <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
-                Specialty: {getDoctorInfo().specialty}
+                {getDepartmentName()}
               </div>
-            )}
-            
-            {/* Hospital Experience */}
-            {getDoctorInfo().hospital_experience && (
-              <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
-                {getDoctorInfo().hospital_experience}
-              </div>
-            )}
-          </div>
+
+              {/* Specialty - only show if different from degree */}
+              {getDoctorInfo().specialty && getDoctorInfo().specialty !== getDoctorInfo().degree && (
+                <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
+                  Specialty: {getDoctorInfo().specialty}
+                </div>
+              )}
+
+              {/* Hospital Experience */}
+              {getDoctorInfo().hospital_experience && (
+                <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
+                  {getDoctorInfo().hospital_experience}
+                </div>
+              )}
+            </div>
 
           </div>
         )}

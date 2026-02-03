@@ -1,33 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  MEDICAL_SERVICES, 
-  SERVICE_CATEGORIES, 
-  getServicesByCategory, 
-  searchServices, 
+import {
+  MEDICAL_SERVICES_DATA,
+  SERVICE_CATEGORIES,
+  getServicesByCategory,
+  searchServices,
   calculateServiceTotal,
-  type MedicalService, 
-  type ServiceOrder, 
+  type MedicalService,
+  type ServiceOrder,
   type OrderedService,
-  type ServiceCategory 
+  type ServiceCategory
 } from '../data/medicalServices';
-import HospitalService from '../services/hospitalService';
+import { HospitalService } from '../services/hospitalService';
 import { supabase } from '../config/supabaseNew';
+import type { Patient, PatientWithRelations } from '../config/supabaseNew';
 import { useReceiptPrinting } from '../hooks/useReceiptPrinting';
 
-interface Patient {
-  id: string;
-  patient_id: string;
-  first_name: string;
-  last_name?: string;
-  phone: string;
-  age: number;
-  gender: string;
-  blood_group?: string;
-}
-
-const HospitalServices: React.FC = () => {
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+export default function HospitalServices() {
+  const [activeTab, setActiveTab] = useState('services');
+  const [patients, setPatients] = useState<PatientWithRelations[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<PatientWithRelations | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [serviceCart, setServiceCart] = useState<OrderedService[]>([]);
@@ -50,7 +41,7 @@ const HospitalServices: React.FC = () => {
 
   const loadPatients = async () => {
     try {
-      const patientsList = await HospitalService.getAllPatients();
+      const patientsList = await HospitalService.getPatients();
       setPatients(patientsList);
     } catch (error) {
       console.error('Error loading patients:', error);
@@ -76,7 +67,7 @@ const HospitalServices: React.FC = () => {
 
   // Filter services based on category and search
   const getFilteredServices = (): MedicalService[] => {
-    let filteredServices = MEDICAL_SERVICES.filter(service => service.isActive);
+    let filteredServices = MEDICAL_SERVICES_DATA.filter(service => service.isActive);
 
     if (selectedCategory !== 'ALL') {
       filteredServices = getServicesByCategory(selectedCategory);
@@ -92,9 +83,9 @@ const HospitalServices: React.FC = () => {
   // Filter patients based on search
   const getFilteredPatients = (): Patient[] => {
     if (!patientSearchQuery.trim()) return patients;
-    
+
     const query = patientSearchQuery.toLowerCase();
-    return patients.filter(patient => 
+    return patients.filter(patient =>
       patient.first_name.toLowerCase().includes(query) ||
       (patient.last_name?.toLowerCase().includes(query)) ||
       patient.patient_id.toLowerCase().includes(query) ||
@@ -105,16 +96,16 @@ const HospitalServices: React.FC = () => {
   // Add service to cart
   const addToCart = (service: MedicalService, quantity: number = 1) => {
     const existingItem = serviceCart.find(item => item.serviceId === service.id);
-    
+
     if (existingItem) {
-      setServiceCart(cart => 
-        cart.map(item => 
+      setServiceCart(cart =>
+        cart.map(item =>
           item.serviceId === service.id
-            ? { 
-                ...item, 
-                quantity: item.quantity + quantity,
-                totalPrice: (item.quantity + quantity) * item.unitPrice
-              }
+            ? {
+              ...item,
+              quantity: item.quantity + quantity,
+              totalPrice: (item.quantity + quantity) * item.unitPrice
+            }
             : item
         )
       );
@@ -143,14 +134,14 @@ const HospitalServices: React.FC = () => {
       return;
     }
 
-    setServiceCart(cart => 
-      cart.map(item => 
+    setServiceCart(cart =>
+      cart.map(item =>
         item.serviceId === serviceId
-          ? { 
-              ...item, 
-              quantity,
-              totalPrice: quantity * item.unitPrice
-            }
+          ? {
+            ...item,
+            quantity,
+            totalPrice: quantity * item.unitPrice
+          }
           : item
       )
     );
@@ -217,7 +208,7 @@ const HospitalServices: React.FC = () => {
       setOrderNotes('');
       setSelectedPatient(null);
       setShowPatientSearch(false);
-      
+
       // Reload recent orders
       loadRecentOrders();
 
@@ -320,7 +311,7 @@ const HospitalServices: React.FC = () => {
                   Selected Patient: {selectedPatient.first_name} {selectedPatient.last_name || ''}
                 </h2>
                 <p className="text-blue-700">
-                  ID: {selectedPatient.patient_id} | Phone: {selectedPatient.phone} | 
+                  ID: {selectedPatient.patient_id} | Phone: {selectedPatient.phone} |
                   Age: {selectedPatient.age} | Gender: {selectedPatient.gender}
                   {selectedPatient.blood_group && ` | Blood Group: ${selectedPatient.blood_group}`}
                 </p>
@@ -354,11 +345,10 @@ const HospitalServices: React.FC = () => {
               <div className="space-y-2">
                 <button
                   onClick={() => setSelectedCategory('ALL')}
-                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                    selectedCategory === 'ALL' 
-                      ? 'bg-blue-100 text-blue-800' 
-                      : 'hover:bg-gray-100'
-                  }`}
+                  className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedCategory === 'ALL'
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'hover:bg-gray-100'
+                    }`}
                 >
                   📋 All Services
                 </button>
@@ -366,11 +356,10 @@ const HospitalServices: React.FC = () => {
                   <button
                     key={key}
                     onClick={() => setSelectedCategory(key as ServiceCategory)}
-                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                      selectedCategory === key 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'hover:bg-gray-100'
-                    }`}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedCategory === key
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'hover:bg-gray-100'
+                      }`}
                   >
                     {category.icon} {category.name}
                     <div className="text-xs text-gray-500 mt-1">{category.description}</div>
@@ -390,7 +379,7 @@ const HospitalServices: React.FC = () => {
                       <h3 className="font-semibold text-gray-900">{service.name}</h3>
                       <p className="text-sm text-gray-600 mb-1">Code: {service.code}</p>
                       <p className="text-sm text-gray-700 mb-2">{service.description}</p>
-                      
+
                       <div className="flex items-center space-x-4 text-xs text-gray-600 mb-2">
                         <span>🏥 {service.department}</span>
                         <span>⏱️ {service.duration} min</span>
@@ -404,19 +393,18 @@ const HospitalServices: React.FC = () => {
                         </p>
                       )}
                     </div>
-                    
+
                     <div className="text-right ml-4">
                       <div className="text-lg font-bold text-green-600">
                         ₹{service.basePrice.toLocaleString()}
                       </div>
-                      <div className={`text-xs px-2 py-1 rounded-full ${
-                        SERVICE_CATEGORIES[service.category]?.color === 'blue' ? 'bg-blue-100 text-blue-800' :
+                      <div className={`text-xs px-2 py-1 rounded-full ${SERVICE_CATEGORIES[service.category]?.color === 'blue' ? 'bg-blue-100 text-blue-800' :
                         SERVICE_CATEGORIES[service.category]?.color === 'green' ? 'bg-green-100 text-green-800' :
-                        SERVICE_CATEGORIES[service.category]?.color === 'red' ? 'bg-red-100 text-red-800' :
-                        SERVICE_CATEGORIES[service.category]?.color === 'purple' ? 'bg-purple-100 text-purple-800' :
-                        SERVICE_CATEGORIES[service.category]?.color === 'orange' ? 'bg-orange-100 text-orange-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                          SERVICE_CATEGORIES[service.category]?.color === 'red' ? 'bg-red-100 text-red-800' :
+                            SERVICE_CATEGORIES[service.category]?.color === 'purple' ? 'bg-purple-100 text-purple-800' :
+                              SERVICE_CATEGORIES[service.category]?.color === 'orange' ? 'bg-orange-100 text-orange-800' :
+                                'bg-gray-100 text-gray-800'
+                        }`}>
                         {SERVICE_CATEGORIES[service.category]?.name}
                       </div>
                     </div>
@@ -450,15 +438,14 @@ const HospitalServices: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    
+
                     <button
                       onClick={() => addToCart(service)}
                       disabled={!selectedPatient}
-                      className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${
-                        !selectedPatient
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
+                      className={`px-4 py-2 rounded-lg transition-colors text-sm font-medium ${!selectedPatient
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                        }`}
                     >
                       {serviceCart.find(item => item.serviceId === service.id) ? 'Add More' : 'Add to Cart'}
                     </button>
@@ -664,5 +651,3 @@ const HospitalServices: React.FC = () => {
     </div>
   );
 };
-
-export default HospitalServices;

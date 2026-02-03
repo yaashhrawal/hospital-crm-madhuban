@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { PatientWithRelations } from '../config/supabaseNew';
 import { getDoctorWithDegree } from '../data/doctorDegrees';
 import { supabase } from '../config/supabaseNew';
-import { MEDICAL_SERVICES, type MedicalService } from '../data/medicalServices';
+import { MEDICAL_SERVICES_DATA, type MedicalService } from '../data/medicalServices';
 import HospitalService from '../services/hospitalService';
 import * as CompletePatientRecordService from '../services/completePatientRecordService';
 import MedicineDropdown from './MedicineDropdown';
@@ -30,7 +30,7 @@ interface PrescriptionData {
 }
 
 const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ patient, onClose }) => {
-  const [doctorDetails, setDoctorDetails] = useState<{specialty?: string, hospital_experience?: string}>({});
+  const [doctorDetails, setDoctorDetails] = useState<{ specialty?: string, hospital_experience?: string }>({});
   const [showTypingInterface, setShowTypingInterface] = useState(false);
   const [prescriptionData, setPrescriptionData] = useState<PrescriptionData>({
     chiefComplaints: {
@@ -47,12 +47,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
     generalAdvise: '',
     medicalAdvise: []
   });
-  
+
   // Custom investigations state
   const [customInvestigations, setCustomInvestigations] = useState<any[]>([]);
   const [newCustomInvestigation, setNewCustomInvestigation] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
-  
+
   // Custom complaints and locations state
   const [painComplaints, setPainComplaints] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
@@ -63,7 +63,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [savedPrescriptions, setSavedPrescriptions] = useState<any[]>([]);
-  
+
   const getCurrentDate = () => {
     return new Date().toLocaleDateString('en-IN');
   };
@@ -71,18 +71,18 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
   // Helper function to convert duration format for display
   const formatDuration = (duration: string) => {
     if (!duration) return '';
-    
+
     const parts = duration.split(' ');
     if (parts.length !== 2) return duration;
-    
+
     const [number, unit] = parts;
     const unitMap: Record<string, string> = {
       'D': 'Days',
-      'W': 'Weeks', 
+      'W': 'Weeks',
       'M': 'Months',
       'Y': 'Years'
     };
-    
+
     const fullUnit = unitMap[unit] || unit;
     return `${number} ${fullUnit}`;
   };
@@ -97,14 +97,14 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
     console.log('🏥 VALANT assigned_department:', patient.assigned_department);
     console.log('📋 VALANT Current doctorDetails state:', doctorDetails);
     console.log('🔍 VALANT Transaction details:', (patient as any).transaction_details);
-    
+
     // Use enhanced doctor fields from transaction-specific data first
     const doctorName = patient.assigned_doctor || (patient as any).doctor_name || '';
     const transactionDegree = (patient as any).doctor_degree;
     const transactionSpecialization = (patient as any).doctor_specialization;
-    
+
     const localDoctorInfo = getDoctorWithDegree(doctorName);
-    
+
     // Prioritize transaction-specific degree, then database specialty, then local degree
     let degree = '';
     if (transactionDegree && transactionDegree.trim()) {
@@ -117,7 +117,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
       degree = localDoctorInfo.degree;
       console.log('✅ VALANT Using local doctor degree:', degree);
     }
-    
+
     const result = {
       name: localDoctorInfo.name,
       degree: degree,
@@ -131,17 +131,17 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
   const getDepartmentName = () => {
     // Prioritize transaction-specific department over patient's assigned department
     let dept = patient.assigned_department || 'GENERAL PHYSICIAN';
-    
+
     console.log('🏥 VALANT Department resolution:', {
       patient_assigned_department: patient.assigned_department,
       final_department: dept
     });
-    
+
     // Fix any ORTHOPEDIC spelling issues
     if (dept.toUpperCase().includes('ORTHOPEDIC')) {
       dept = dept.replace(/ORTHOPEDIC/gi, 'ORTHOPAEDIC');
     }
-    
+
     console.log('🏥 VALANT FINAL department:', dept);
     return dept;
   };
@@ -151,12 +151,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
     if ((patient as any).currentTransactionAmount !== undefined) {
       return (patient as any).currentTransactionAmount;
     }
-    
+
     // Otherwise, show total of all completed transactions (original behavior)
     if (!patient.transactions || patient.transactions.length === 0) {
       return 0;
     }
-    
+
     return patient.transactions
       .filter(transaction => transaction.status === 'COMPLETED')
       .reduce((total, transaction) => total + transaction.amount, 0);
@@ -167,50 +167,50 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
     const loadData = async () => {
       try {
         setIsLoading(true);
-        
+
         // Load custom investigations from localStorage
         const storedInvestigations = localStorage.getItem('custom_investigations');
         if (storedInvestigations) {
           setCustomInvestigations(JSON.parse(storedInvestigations));
         }
-        
+
         // Load pain complaints from database
         const complaints = await HospitalService.getPainComplaints();
         setPainComplaints(complaints);
-        
+
         // Load locations from database
         const locationsList = await HospitalService.getLocations();
         setLocations(locationsList);
-        
+
         // PRIORITY 1: Load data from Complete Patient Record database if available
         const savedPatientRecord = await CompletePatientRecordService.getCompletePatientRecord(patient.patient_id);
-        
+
         if (savedPatientRecord) {
           try {
             console.log('✅ Found Complete Patient Record data in database:', savedPatientRecord);
-            
+
             // COMPREHENSIVE MAPPING - Map Complete Patient Record data to show ALL sections
             const mappedChiefComplaints = { painComplaint: '', location: '', duration: '' };
             let mappedPresentHistory = '';
             let mappedInvestigations: string[] = [];
-            
+
             // Build comprehensive present history with ALL Complete Patient Record sections
             const presentHistorySections = [];
-            
+
             // 1. CHIEF COMPLAINTS SECTION
             if (savedPatientRecord.chiefComplaints && savedPatientRecord.chiefComplaints.length > 0) {
-              const complaintsText = savedPatientRecord.chiefComplaints.map((complaint, index) => 
+              const complaintsText = savedPatientRecord.chiefComplaints.map((complaint, index) =>
                 `${index + 1}. ${complaint.complaint} (${complaint.period || complaint.duration || 'Unknown duration'}) - ${complaint.presentHistory || complaint.notes || 'No additional details'}`
               ).join('\n');
               presentHistorySections.push(`CHIEF COMPLAINTS:\n${complaintsText}`);
-              
+
               // Also map to individual chief complaints fields
               const firstComplaint = savedPatientRecord.chiefComplaints[0];
               mappedChiefComplaints.painComplaint = firstComplaint.complaint || '';
               mappedChiefComplaints.duration = firstComplaint.duration || firstComplaint.period || '';
               mappedChiefComplaints.location = firstComplaint.location || '';
             }
-            
+
             // 2. HIGH RISK CONDITIONS & MEDICAL HISTORY SECTION
             if (savedPatientRecord.highRisk) {
               const highRiskDetails = [];
@@ -238,12 +238,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.highRisk.notes) {
                 highRiskDetails.push(`High Risk Notes: ${savedPatientRecord.highRisk.notes}`);
               }
-              
+
               if (highRiskDetails.length > 0) {
                 presentHistorySections.push(`HIGH RISK CONDITIONS & MEDICAL HISTORY:\n${highRiskDetails.join('\n')}`);
               }
             }
-            
+
             // 3. EXAMINATION FINDINGS SECTION
             if (savedPatientRecord.examination) {
               const examDetails = [];
@@ -256,12 +256,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.examination.respiratory_examination) examDetails.push(`Respiratory: ${savedPatientRecord.examination.respiratory_examination}`);
               if (savedPatientRecord.examination.abdominal_examination) examDetails.push(`Abdominal: ${savedPatientRecord.examination.abdominal_examination}`);
               if (savedPatientRecord.examination.musculoskeletal_examination) examDetails.push(`Musculoskeletal: ${savedPatientRecord.examination.musculoskeletal_examination}`);
-              
+
               if (examDetails.length > 0) {
                 presentHistorySections.push(`EXAMINATION FINDINGS:\n${examDetails.join('\n')}`);
               }
             }
-            
+
             // 4. DIAGNOSIS SECTION
             if (savedPatientRecord.diagnosis) {
               const diagnosisDetails = [];
@@ -271,15 +271,15 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.diagnosis.icd_codes) diagnosisDetails.push(`ICD Codes: ${savedPatientRecord.diagnosis.icd_codes}`);
               if (savedPatientRecord.diagnosis.confidence_level) diagnosisDetails.push(`Confidence Level: ${savedPatientRecord.diagnosis.confidence_level}`);
               if (savedPatientRecord.diagnosis.notes) diagnosisDetails.push(`Diagnosis Notes: ${savedPatientRecord.diagnosis.notes}`);
-              
+
               if (diagnosisDetails.length > 0) {
                 presentHistorySections.push(`DIAGNOSIS:\n${diagnosisDetails.join('\n')}`);
               }
             }
-            
+
             // Combine all sections into present history
             mappedPresentHistory = presentHistorySections.join('\n\n═══════════════════\n\n');
-            
+
             // Map Investigations comprehensively - include ALL investigation types
             if (savedPatientRecord.investigation) {
               const investigations = [];
@@ -292,7 +292,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.investigation.interpretation) investigations.push(`Interpretation: ${savedPatientRecord.investigation.interpretation}`);
               mappedInvestigations = investigations.filter(inv => inv && inv.trim());
             }
-            
+
             // Map Examination data to local examination - comprehensive formatting
             let localExaminationText = '';
             if (savedPatientRecord.examination) {
@@ -306,10 +306,10 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.examination.respiratory_examination) examFields.push(`RS: ${savedPatientRecord.examination.respiratory_examination}`);
               if (savedPatientRecord.examination.abdominal_examination) examFields.push(`Abdomen: ${savedPatientRecord.examination.abdominal_examination}`);
               if (savedPatientRecord.examination.musculoskeletal_examination) examFields.push(`MSK: ${savedPatientRecord.examination.musculoskeletal_examination}`);
-              
+
               localExaminationText = examFields.join('\n') || '';
             }
-            
+
             // Map Prescriptions to medical advise - comprehensive medication formatting
             let medicalAdviseList: string[] = [];
             if (savedPatientRecord.prescription?.medications && savedPatientRecord.prescription.medications.length > 0) {
@@ -324,7 +324,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
                 if (med.route) parts.push(`- Route: ${med.route}`);
                 return parts.join(' ');
               }).filter(med => med.trim());
-              
+
               // Add prescription-level instructions
               if (savedPatientRecord.prescription.dosage_instructions) {
                 medicalAdviseList.push(`\nGeneral Dosage Instructions: ${savedPatientRecord.prescription.dosage_instructions}`);
@@ -336,7 +336,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
                 medicalAdviseList.push(`Follow-up Date: ${savedPatientRecord.prescription.follow_up_date}`);
               }
             }
-            
+
             // COMPREHENSIVE PAST HISTORY - All historical data including high risk, surgical, family history
             const pastHistorySections = [];
             if (savedPatientRecord.highRisk) {
@@ -346,7 +346,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.highRisk.notes) pastHistorySections.push(`Additional Notes: ${savedPatientRecord.highRisk.notes}`);
             }
             const mappedPastHistory = pastHistorySections.join('\n') || '';
-            
+
             // COMPREHENSIVE DRUG HISTORY - All medication and allergy information
             const drugHistorySections = [];
             if (savedPatientRecord.highRisk) {
@@ -355,7 +355,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               if (savedPatientRecord.highRisk.allergy_food) drugHistorySections.push(`Food Allergies: ${savedPatientRecord.highRisk.allergy_food}`);
             }
             const mappedDrugHistory = drugHistorySections.join('\n') || '';
-            
+
             // COMPREHENSIVE GENERAL ADVISE - All diagnosis and prescription advice
             const generalAdviseSections = [];
             if (savedPatientRecord.diagnosis) {
@@ -386,10 +386,10 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               generalAdvise: mappedGeneralAdvise,
               medicalAdvise: medicalAdviseList
             });
-            
+
             toast.success('✅ Loaded data from Complete Patient Record database!');
             console.log('✅ Successfully mapped Complete Patient Record database to prescription format');
-            
+
           } catch (error) {
             console.error('❌ Error parsing Complete Patient Record:', error);
             toast.error('Error loading Complete Patient Record data');
@@ -398,7 +398,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
           // PRIORITY 2: Load saved prescriptions for this patient (fallback)
           const prescriptions = await HospitalService.getPrescriptions(patient.patient_id);
           setSavedPrescriptions(prescriptions);
-          
+
           // If there are saved prescriptions, load the most recent one
           if (prescriptions && prescriptions.length > 0) {
             const latestPrescription = prescriptions[0]; // First item is most recent due to ordering
@@ -411,13 +411,13 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               investigation: latestPrescription.investigations || [],
               investigationReference: latestPrescription.investigation_reference || '',
               generalAdvise: latestPrescription.general_advise || '',
-              medicalAdvise: Array.isArray(latestPrescription.medical_advise) ? latestPrescription.medical_advise : 
-                              latestPrescription.medical_advise ? [latestPrescription.medical_advise] : []
+              medicalAdvise: Array.isArray(latestPrescription.medical_advise) ? latestPrescription.medical_advise :
+                latestPrescription.medical_advise ? [latestPrescription.medical_advise] : []
             });
             console.log('✅ Loaded latest prescription data for patient:', patient.patient_id);
           }
         }
-        
+
       } catch (error) {
         console.error('Failed to load data:', error);
         toast.error('Failed to load prescription data');
@@ -425,7 +425,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
         setIsLoading(false);
       }
     };
-    
+
     loadData();
   }, [patient.patient_id]);
 
@@ -438,12 +438,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
 
     try {
       const investigationName = newCustomInvestigation.trim();
-      
+
       // Check if already exists
-      const existingInvestigation = customInvestigations.find(inv => 
+      const existingInvestigation = customInvestigations.find(inv =>
         inv.name.toLowerCase() === investigationName.toLowerCase()
       );
-      
+
       if (existingInvestigation) {
         // Add to prescription if not already there
         if (!prescriptionData.investigation.includes(existingInvestigation.name)) {
@@ -465,14 +465,14 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
         category: 'Custom Investigation',
         created_at: new Date().toISOString()
       };
-      
+
       // Add to local state
       const updatedInvestigations = [...customInvestigations, newInvestigation];
       setCustomInvestigations(updatedInvestigations);
-      
+
       // Save to localStorage
       localStorage.setItem('custom_investigations', JSON.stringify(updatedInvestigations));
-      
+
       // Add to prescription
       if (!prescriptionData.investigation.includes(newInvestigation.name)) {
         setPrescriptionData(prev => ({
@@ -480,11 +480,11 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
           investigation: [...prev.investigation, newInvestigation.name]
         }));
       }
-      
+
       // Clear input and hide
       setNewCustomInvestigation('');
       setShowCustomInput(false);
-      
+
       toast.success('Custom investigation added and saved!');
     } catch (error) {
       console.error('Failed to add custom investigation:', error);
@@ -501,20 +501,20 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
 
     try {
       const complaint = await HospitalService.addPainComplaint(newPainComplaint.trim());
-      
+
       // Add to local state
       setPainComplaints(prev => [...prev, complaint]);
-      
+
       // Set in prescription data
       setPrescriptionData(prev => ({
         ...prev,
         chiefComplaints: { ...prev.chiefComplaints, painComplaint: complaint.name }
       }));
-      
+
       // Clear input and hide
       setNewPainComplaint('');
       setShowPainComplaintInput(false);
-      
+
       toast.success('Pain complaint added and saved!');
     } catch (error) {
       console.error('Failed to add pain complaint:', error);
@@ -531,20 +531,20 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
 
     try {
       const location = await HospitalService.addLocation(newLocation.trim());
-      
+
       // Add to local state
       setLocations(prev => [...prev, location]);
-      
+
       // Set in prescription data
       setPrescriptionData(prev => ({
         ...prev,
         chiefComplaints: { ...prev.chiefComplaints, location: location.name }
       }));
-      
+
       // Clear input and hide
       setNewLocation('');
       setShowLocationInput(false);
-      
+
       toast.success('Location added and saved!');
     } catch (error) {
       console.error('Failed to add location:', error);
@@ -555,12 +555,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
   // Function to save prescription
   const handleSavePrescription = async () => {
     if (isSaving) return;
-    
+
     try {
       setIsSaving(true);
-      
+
       // Validate that at least one field is filled
-      const hasContent = 
+      const hasContent =
         prescriptionData.chiefComplaints.painComplaint ||
         prescriptionData.chiefComplaints.location ||
         prescriptionData.chiefComplaints.duration ||
@@ -572,15 +572,15 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
         prescriptionData.investigationReference ||
         prescriptionData.generalAdvise ||
         prescriptionData.medicalAdvise.length > 0;
-      
+
       if (!hasContent) {
         toast.error('Please fill at least one field before saving');
         return;
       }
-      
+
       const doctorInfo = getDoctorInfo();
       const departmentName = getDepartmentName();
-      
+
       const prescriptionPayload = {
         patient_id: patient.patient_id,
         patient_name: `${patient.prefix ? `${patient.prefix} ` : ''}${patient.first_name} ${patient.last_name}`,
@@ -596,14 +596,14 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
         general_advise: prescriptionData.generalAdvise || null,
         medical_advise: prescriptionData.medicalAdvise.length > 0 ? prescriptionData.medicalAdvise : null
       };
-      
+
       const savedPrescription = await HospitalService.savePrescription(prescriptionPayload);
-      
+
       // Update the saved prescriptions list
       setSavedPrescriptions(prev => [savedPrescription, ...prev]);
-      
+
       toast.success('Prescription saved successfully!');
-      
+
     } catch (error) {
       console.error('Failed to save prescription:', error);
       toast.error('Failed to save prescription');
@@ -611,7 +611,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
       setIsSaving(false);
     }
   };
-  
+
   const handlePrint = () => {
     // Calculate values before generating HTML
     const doctorInfo = getDoctorInfo();
@@ -620,12 +620,12 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
     const ageText = patient.age && patient.age.trim() !== '' ? `${patient.age} years` : 'N/A';
     const genderText = patient.gender === 'MALE' ? 'M' : patient.gender === 'FEMALE' ? 'F' : patient.gender;
     const totalPaid = getTotalPaidAmount();
-    
+
     // Check if this is a transaction-specific prescription
     const isTransactionSpecific = (patient as any).currentTransactionAmount !== undefined;
     const transactionType = isTransactionSpecific ? (patient as any).currentTransactionType : '';
     const transactionDate = isTransactionSpecific ? (patient as any).currentTransactionDate : '';
-    
+
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -972,33 +972,33 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
     const fetchDepartmentDetails = async () => {
       console.log('🚀 Sevasangraha fetchDepartmentDetails called');
       console.log('🏥 Patient assigned_department:', patient.assigned_department);
-      
+
       if (patient.assigned_department) {
         try {
           console.log('🔍 Sevasangraha Searching for department:', patient.assigned_department);
-          
+
           // Simple exact match query first
           const { data: departments, error } = await supabase
             .from('departments')
             .select('name, specialty, hospital_experience')
             .eq('name', patient.assigned_department);
-          
+
           console.log('📋 Sevasangraha Department query result:', departments);
           console.log('📋 Sevasangraha Query error:', error);
-          
+
           if (departments && departments.length > 0) {
             const department = departments[0];
             console.log('✅ Sevasangraha Found department data:', department);
-            
+
             const newDetails = {
               specialty: department.specialty || '',
               hospital_experience: department.hospital_experience || ''
             };
-            
+
             console.log('📋 Sevasangraha Setting new state:', newDetails);
             console.log('🏥 Department hospital_experience:', department.hospital_experience);
             setDoctorDetails(newDetails);
-            
+
             // Force re-render
             setTimeout(() => {
               console.log('📋 Sevasangraha State after update:', doctorDetails);
@@ -1006,7 +1006,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
             }, 100);
           } else {
             console.log('❌ Sevasangraha No exact match, trying partial match');
-            
+
             // Try alternative spelling for ORTHOPEDIC/ORTHOPAEDIC
             let searchTerm = patient.assigned_department;
             if (patient.assigned_department === 'ORTHOPEDIC') {
@@ -1014,16 +1014,16 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
             } else if (patient.assigned_department === 'ORTHOPAEDIC') {
               searchTerm = 'ORTHOPEDIC';
             }
-            
+
             console.log('🔍 Sevasangraha Trying alternative spelling:', searchTerm);
-            
+
             const { data: altDepts, error: altError } = await supabase
               .from('departments')
               .select('name, specialty, hospital_experience')
               .eq('name', searchTerm);
-            
+
             console.log('📋 Sevasangraha Alternative spelling result:', altDepts);
-            
+
             if (altDepts && altDepts.length > 0) {
               const department = altDepts[0];
               setDoctorDetails({
@@ -1037,9 +1037,9 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
                 .from('departments')
                 .select('name, specialty, hospital_experience')
                 .ilike('name', `%${patient.assigned_department}%`);
-              
+
               console.log('📋 Sevasangraha Partial match result:', partialDepts);
-              
+
               if (partialDepts && partialDepts.length > 0) {
                 const department = partialDepts[0];
                 setDoctorDetails({
@@ -1050,13 +1050,13 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
               }
             }
           }
-          
+
         } catch (error) {
           console.error('❌ Sevasangraha Database error:', error);
         }
       }
     };
-    
+
     fetchDepartmentDetails();
   }, [patient.assigned_department, doctorDetails.specialty, doctorDetails.hospital_experience]);
 
@@ -1090,7 +1090,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
           }
         `
       }} />
-      
+
       <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-auto">
         {/* Print, Type, Save, and Close buttons */}
         <div className="flex justify-end gap-2 p-4 border-b print:hidden">
@@ -1103,11 +1103,10 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
           <button
             onClick={handleSavePrescription}
             disabled={isSaving}
-            className={`px-4 py-2 text-white rounded flex items-center gap-2 ${
-              isSaving 
-                ? 'bg-purple-400 cursor-not-allowed' 
-                : 'bg-purple-600 hover:bg-purple-700'
-            }`}
+            className={`px-4 py-2 text-white rounded flex items-center gap-2 ${isSaving
+              ? 'bg-purple-400 cursor-not-allowed'
+              : 'bg-purple-600 hover:bg-purple-700'
+              }`}
           >
             <span>💾</span> {isSaving ? 'Saving...' : 'Save Prescription'}
           </button>
@@ -1130,7 +1129,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
           <div className="p-6 border-b bg-gray-50 print:hidden">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-800">Prescription Details</h3>
-              
+
               {/* Saved Prescriptions Dropdown */}
               {savedPrescriptions.length > 0 && (
                 <div className="flex items-center gap-2">
@@ -1150,7 +1149,7 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
                             investigationReference: selectedPrescription.investigation_reference || '',
                             generalAdvise: selectedPrescription.general_advise || '',
                             medicalAdvise: Array.isArray(selectedPrescription.medical_advise) ? selectedPrescription.medical_advise :
-                                      selectedPrescription.medical_advise ? [selectedPrescription.medical_advise] : []
+                              selectedPrescription.medical_advise ? [selectedPrescription.medical_advise] : []
                           });
                           toast.success('Prescription loaded successfully!');
                         }
@@ -1169,444 +1168,443 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
                 </div>
               )}
             </div>
-            
+
             {isLoading && (
               <div className="text-center py-4">
                 <div className="text-gray-600">Loading prescription data...</div>
               </div>
             )}
-            
+
             {/* Chief Complaints Section */}
             {!isLoading && (
               <>
-            <div className="mb-6">
-              <h4 className="text-md font-medium mb-3 text-gray-700">1. Chief Complaints</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
-                {/* a. Pain Complaint with dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">a.</label>
-                  <div className="space-y-2">
-                    <select
-                      value={prescriptionData.chiefComplaints.painComplaint}
-                      onChange={(e) => setPrescriptionData(prev => ({
-                        ...prev,
-                        chiefComplaints: { ...prev.chiefComplaints, painComplaint: e.target.value }
-                      }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select pain complaint...</option>
-                      {painComplaints.map(complaint => (
-                        <option key={complaint.id} value={complaint.name}>
-                          {complaint.name}
-                        </option>
-                      ))}
-                    </select>
-                    
-                    {/* Add Custom Pain Complaint */}
+                <div className="mb-6">
+                  <h4 className="text-md font-medium mb-3 text-gray-700">1. Chief Complaints</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                    {/* a. Pain Complaint with dropdown */}
                     <div>
-                      {!showPainComplaintInput ? (
-                        <button
-                          onClick={() => setShowPainComplaintInput(true)}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                      <label className="block text-sm font-medium text-gray-600 mb-1">a.</label>
+                      <div className="space-y-2">
+                        <select
+                          value={prescriptionData.chiefComplaints.painComplaint}
+                          onChange={(e) => setPrescriptionData(prev => ({
+                            ...prev,
+                            chiefComplaints: { ...prev.chiefComplaints, painComplaint: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          <span>+</span> Add Custom
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newPainComplaint}
-                            onChange={(e) => setNewPainComplaint(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddPainComplaint();
-                              }
-                            }}
-                            placeholder="Enter new pain complaint..."
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            autoFocus
-                          />
-                          <button
-                            onClick={handleAddPainComplaint}
-                            className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-                          >
-                            Add
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowPainComplaintInput(false);
-                              setNewPainComplaint('');
-                            }}
-                            className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
-                          >
-                            Cancel
-                          </button>
+                          <option value="">Select pain complaint...</option>
+                          {painComplaints.map(complaint => (
+                            <option key={complaint.id} value={complaint.name}>
+                              {complaint.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Add Custom Pain Complaint */}
+                        <div>
+                          {!showPainComplaintInput ? (
+                            <button
+                              onClick={() => setShowPainComplaintInput(true)}
+                              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                            >
+                              <span>+</span> Add Custom
+                            </button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newPainComplaint}
+                                onChange={(e) => setNewPainComplaint(e.target.value)}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleAddPainComplaint();
+                                  }
+                                }}
+                                placeholder="Enter new pain complaint..."
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={handleAddPainComplaint}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                              >
+                                Add
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowPainComplaintInput(false);
+                                  setNewPainComplaint('');
+                                }}
+                                className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* b. Location with dropdown */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">b.</label>
+                      <div className="space-y-2">
+                        <select
+                          value={prescriptionData.chiefComplaints.location}
+                          onChange={(e) => setPrescriptionData(prev => ({
+                            ...prev,
+                            chiefComplaints: { ...prev.chiefComplaints, location: e.target.value }
+                          }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select location...</option>
+                          {locations.map(location => (
+                            <option key={location.id} value={location.name}>
+                              {location.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Add Custom Location */}
+                        <div>
+                          {!showLocationInput ? (
+                            <button
+                              onClick={() => setShowLocationInput(true)}
+                              className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                            >
+                              <span>+</span> Add Custom
+                            </button>
+                          ) : (
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newLocation}
+                                onChange={(e) => setNewLocation(e.target.value)}
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleAddLocation();
+                                  }
+                                }}
+                                placeholder="Enter new location..."
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                autoFocus
+                              />
+                              <button
+                                onClick={handleAddLocation}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                              >
+                                Add
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setShowLocationInput(false);
+                                  setNewLocation('');
+                                }}
+                                className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* c. Duration with dropdowns */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-600 mb-1">c. Duration</label>
+                      <div className="flex gap-2">
+                        {/* Number dropdown (1-30) */}
+                        <select
+                          value={prescriptionData.chiefComplaints.duration.split(' ')[0] || ''}
+                          onChange={(e) => {
+                            const number = e.target.value;
+                            const unit = prescriptionData.chiefComplaints.duration.split(' ')[1] || 'D';
+                            const newDuration = number && unit ? `${number} ${unit}` : '';
+                            setPrescriptionData(prev => ({
+                              ...prev,
+                              chiefComplaints: { ...prev.chiefComplaints, duration: newDuration }
+                            }));
+                          }}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Number</option>
+                          {Array.from({ length: 30 }, (_, i) => i + 1).map(num => (
+                            <option key={num} value={num}>
+                              {num}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Unit dropdown (D,W,M,Y) */}
+                        <select
+                          value={prescriptionData.chiefComplaints.duration.split(' ')[1] || ''}
+                          onChange={(e) => {
+                            const number = prescriptionData.chiefComplaints.duration.split(' ')[0] || '';
+                            const unit = e.target.value;
+                            const newDuration = number && unit ? `${number} ${unit}` : '';
+                            setPrescriptionData(prev => ({
+                              ...prev,
+                              chiefComplaints: { ...prev.chiefComplaints, duration: newDuration }
+                            }));
+                          }}
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Unit</option>
+                          <option value="D">Days</option>
+                          <option value="W">Weeks</option>
+                          <option value="M">Months</option>
+                          <option value="Y">Years</option>
+                        </select>
+                      </div>
+
+                      {/* Display selected duration */}
+                      {prescriptionData.chiefComplaints.duration && (
+                        <div className="mt-2 text-sm text-gray-600">
+                          Selected: {prescriptionData.chiefComplaints.duration}
                         </div>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* b. Location with dropdown */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">b.</label>
-                  <div className="space-y-2">
-                    <select
-                      value={prescriptionData.chiefComplaints.location}
-                      onChange={(e) => setPrescriptionData(prev => ({
-                        ...prev,
-                        chiefComplaints: { ...prev.chiefComplaints, location: e.target.value }
-                      }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select location...</option>
-                      {locations.map(location => (
-                        <option key={location.id} value={location.name}>
-                          {location.name}
-                        </option>
-                      ))}
-                    </select>
-                    
-                    {/* Add Custom Location */}
-                    <div>
-                      {!showLocationInput ? (
-                        <button
-                          onClick={() => setShowLocationInput(true)}
-                          className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
-                        >
-                          <span>+</span> Add Custom
-                        </button>
-                      ) : (
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={newLocation}
-                            onChange={(e) => setNewLocation(e.target.value)}
-                            onKeyPress={(e) => {
-                              if (e.key === 'Enter') {
-                                handleAddLocation();
-                              }
-                            }}
-                            placeholder="Enter new location..."
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            autoFocus
-                          />
-                          <button
-                            onClick={handleAddLocation}
-                            className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-                          >
-                            Add
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowLocationInput(false);
-                              setNewLocation('');
-                            }}
-                            className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* c. Duration with dropdowns */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">c. Duration</label>
-                  <div className="flex gap-2">
-                    {/* Number dropdown (1-30) */}
-                    <select
-                      value={prescriptionData.chiefComplaints.duration.split(' ')[0] || ''}
-                      onChange={(e) => {
-                        const number = e.target.value;
-                        const unit = prescriptionData.chiefComplaints.duration.split(' ')[1] || 'D';
-                        const newDuration = number && unit ? `${number} ${unit}` : '';
-                        setPrescriptionData(prev => ({
-                          ...prev,
-                          chiefComplaints: { ...prev.chiefComplaints, duration: newDuration }
-                        }));
-                      }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Number</option>
-                      {Array.from({ length: 30 }, (_, i) => i + 1).map(num => (
-                        <option key={num} value={num}>
-                          {num}
-                        </option>
-                      ))}
-                    </select>
-                    
-                    {/* Unit dropdown (D,W,M,Y) */}
-                    <select
-                      value={prescriptionData.chiefComplaints.duration.split(' ')[1] || ''}
-                      onChange={(e) => {
-                        const number = prescriptionData.chiefComplaints.duration.split(' ')[0] || '';
-                        const unit = e.target.value;
-                        const newDuration = number && unit ? `${number} ${unit}` : '';
-                        setPrescriptionData(prev => ({
-                          ...prev,
-                          chiefComplaints: { ...prev.chiefComplaints, duration: newDuration }
-                        }));
-                      }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Unit</option>
-                      <option value="D">Days</option>
-                      <option value="W">Weeks</option>
-                      <option value="M">Months</option>
-                      <option value="Y">Years</option>
-                    </select>
-                  </div>
-                  
-                  {/* Display selected duration */}
-                  {prescriptionData.chiefComplaints.duration && (
-                    <div className="mt-2 text-sm text-gray-600">
-                      Selected: {prescriptionData.chiefComplaints.duration}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 2. Present History */}
-            <div className="mb-6">
-              <label className="block text-md font-medium text-gray-700 mb-2">2. Present History</label>
-              <textarea
-                value={prescriptionData.presentHistory}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, presentHistory: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4}
-                placeholder="Describe the present history..."
-              />
-            </div>
-
-            {/* 3. Past History */}
-            <div className="mb-6">
-              <label className="block text-md font-medium text-gray-700 mb-2">3. Past History</label>
-              <textarea
-                value={prescriptionData.pastHistory}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, pastHistory: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4}
-                placeholder="Describe the past history..."
-              />
-            </div>
-
-            {/* 4. Drug History */}
-            <div className="mb-6">
-              <label className="block text-md font-medium text-gray-700 mb-2">4. Drug History</label>
-              <textarea
-                value={prescriptionData.drugHistory}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, drugHistory: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4}
-                placeholder="Describe the drug history..."
-              />
-            </div>
-
-            {/* 5. Local Examination */}
-            <div className="mb-6">
-              <label className="block text-md font-medium text-gray-700 mb-2">5. Local Examination</label>
-              <textarea
-                value={prescriptionData.localExamination}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, localExamination: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4}
-                placeholder="Describe the local examination..."
-              />
-            </div>
-
-            {/* 6. Investigation */}
-            <div className="mb-6">
-              <label className="block text-md font-medium text-gray-700 mb-2">6. Investigation</label>
-              <div className="space-y-4">
-                <select
-                  onChange={(e) => {
-                    const selectedService = e.target.value;
-                    if (selectedService && !prescriptionData.investigation.includes(selectedService)) {
-                      setPrescriptionData(prev => ({
-                        ...prev,
-                        investigation: [...prev.investigation, selectedService]
-                      }));
-                    }
-                    e.target.value = '';
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select Investigation/Service...</option>
-                  
-                  {/* Medical Services */}
-                  <optgroup label="Medical Services">
-                    {MEDICAL_SERVICES
-                      .filter(service => service.isActive)
-                      .map(service => (
-                        <option key={service.id} value={service.name}>
-                          {service.name} - {service.category} (₹{service.basePrice})
-                        </option>
-                      ))
-                    }
-                  </optgroup>
-                  
-                  {/* Custom Investigations */}
-                  {customInvestigations.length > 0 && (
-                    <optgroup label="Custom Investigations">
-                      {customInvestigations.map(investigation => (
-                        <option key={investigation.id} value={investigation.name}>
-                          {investigation.name} - {investigation.category}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-                
-                {/* Add Custom Investigation Button */}
-                <div className="mt-2">
-                  {!showCustomInput ? (
-                    <button
-                      onClick={() => setShowCustomInput(true)}
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
-                    >
-                      <span>+</span> Add Custom Investigation
-                    </button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newCustomInvestigation}
-                        onChange={(e) => setNewCustomInvestigation(e.target.value)}
-                        onKeyPress={(e) => {
-                          if (e.key === 'Enter') {
-                            handleAddCustomInvestigation();
-                          }
-                        }}
-                        placeholder="Enter custom investigation name..."
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        autoFocus
-                      />
-                      <button
-                        onClick={handleAddCustomInvestigation}
-                        className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={() => {
-                          setShowCustomInput(false);
-                          setNewCustomInvestigation('');
-                        }}
-                        className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Selected Investigations */}
-                {prescriptionData.investigation.length > 0 && (
-                  <div className="mt-2">
-                    <div className="flex flex-wrap gap-2">
-                      {prescriptionData.investigation.map((item, index) => (
-                        <div key={index} className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm">
-                          <span>{item}</span>
-                          <button
-                            onClick={() => {
-                              setPrescriptionData(prev => ({
-                                ...prev,
-                                investigation: prev.investigation.filter((_, i) => i !== index)
-                              }));
-                            }}
-                            className="text-blue-600 hover:text-blue-800 font-bold"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {/* Investigation Reference */}
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-600 mb-1">Reference Notes</label>
+                {/* 2. Present History */}
+                <div className="mb-6">
+                  <label className="block text-md font-medium text-gray-700 mb-2">2. Present History</label>
                   <textarea
-                    value={prescriptionData.investigationReference}
-                    onChange={(e) => setPrescriptionData(prev => ({ ...prev, investigationReference: e.target.value }))}
+                    value={prescriptionData.presentHistory}
+                    onChange={(e) => setPrescriptionData(prev => ({ ...prev, presentHistory: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    rows={3}
-                    placeholder="Reference notes for investigations..."
+                    rows={4}
+                    placeholder="Describe the present history..."
                   />
                 </div>
-              </div>
-            </div>
 
-            {/* 7. General Advise */}
-            <div className="mb-6">
-              <label className="block text-md font-medium text-gray-700 mb-2">7. General Advise</label>
-              <textarea
-                value={prescriptionData.generalAdvise}
-                onChange={(e) => setPrescriptionData(prev => ({ ...prev, generalAdvise: e.target.value }))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={4}
-                placeholder="General advice for the patient..."
-              />
-            </div>
+                {/* 3. Past History */}
+                <div className="mb-6">
+                  <label className="block text-md font-medium text-gray-700 mb-2">3. Past History</label>
+                  <textarea
+                    value={prescriptionData.pastHistory}
+                    onChange={(e) => setPrescriptionData(prev => ({ ...prev, pastHistory: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                    placeholder="Describe the past history..."
+                  />
+                </div>
 
-            {/* 8. Medical Advise */}
-            <div className="mb-6">
-              <MedicineDropdown
-                selectedMedicines={prescriptionData.medicalAdvise}
-                onChange={(medicines) => setPrescriptionData(prev => ({ ...prev, medicalAdvise: medicines }))}
-                placeholder="Select Medicine..."
-                label="8. Medical Advise"
-              />
-            </div>
+                {/* 4. Drug History */}
+                <div className="mb-6">
+                  <label className="block text-md font-medium text-gray-700 mb-2">4. Drug History</label>
+                  <textarea
+                    value={prescriptionData.drugHistory}
+                    onChange={(e) => setPrescriptionData(prev => ({ ...prev, drugHistory: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                    placeholder="Describe the drug history..."
+                  />
+                </div>
+
+                {/* 5. Local Examination */}
+                <div className="mb-6">
+                  <label className="block text-md font-medium text-gray-700 mb-2">5. Local Examination</label>
+                  <textarea
+                    value={prescriptionData.localExamination}
+                    onChange={(e) => setPrescriptionData(prev => ({ ...prev, localExamination: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                    placeholder="Describe the local examination..."
+                  />
+                </div>
+
+                {/* 6. Investigation */}
+                <div className="mb-6">
+                  <label className="block text-md font-medium text-gray-700 mb-2">6. Investigation</label>
+                  <div className="space-y-4">
+                    <select
+                      onChange={(e) => {
+                        const selectedService = e.target.value;
+                        if (selectedService && !prescriptionData.investigation.includes(selectedService)) {
+                          setPrescriptionData(prev => ({
+                            ...prev,
+                            investigation: [...prev.investigation, selectedService]
+                          }));
+                        }
+                        e.target.value = '';
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Investigation/Service...</option>
+
+                      {/* Medical Services */}
+                      <optgroup label="Medical Services">
+                        {MEDICAL_SERVICES_DATA
+                          .filter(service => service.isActive)
+                          .map(service => (
+                            <option key={service.id} value={service.name}>
+                              {service.name} - {service.category} (₹{service.basePrice})
+                            </option>
+                          ))
+                        }
+                      </optgroup>
+
+                      {/* Custom Investigations */}
+                      {customInvestigations.length > 0 && (
+                        <optgroup label="Custom Investigations">
+                          {customInvestigations.map(investigation => (
+                            <option key={investigation.id} value={investigation.name}>
+                              {investigation.name} - {investigation.category}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+
+                    {/* Add Custom Investigation Button */}
+                    <div className="mt-2">
+                      {!showCustomInput ? (
+                        <button
+                          onClick={() => setShowCustomInput(true)}
+                          className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
+                        >
+                          <span>+</span> Add Custom Investigation
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newCustomInvestigation}
+                            onChange={(e) => setNewCustomInvestigation(e.target.value)}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter') {
+                                handleAddCustomInvestigation();
+                              }
+                            }}
+                            placeholder="Enter custom investigation name..."
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleAddCustomInvestigation}
+                            className="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                          >
+                            Add
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowCustomInput(false);
+                              setNewCustomInvestigation('');
+                            }}
+                            className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-400"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Selected Investigations */}
+                    {prescriptionData.investigation.length > 0 && (
+                      <div className="mt-2">
+                        <div className="flex flex-wrap gap-2">
+                          {prescriptionData.investigation.map((item, index) => (
+                            <div key={index} className="flex items-center gap-1 bg-blue-100 text-blue-800 px-2 py-1 rounded-md text-sm">
+                              <span>{item}</span>
+                              <button
+                                onClick={() => {
+                                  setPrescriptionData(prev => ({
+                                    ...prev,
+                                    investigation: prev.investigation.filter((_, i) => i !== index)
+                                  }));
+                                }}
+                                className="text-blue-600 hover:text-blue-800 font-bold"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Investigation Reference */}
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-600 mb-1">Reference Notes</label>
+                      <textarea
+                        value={prescriptionData.investigationReference}
+                        onChange={(e) => setPrescriptionData(prev => ({ ...prev, investigationReference: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={3}
+                        placeholder="Reference notes for investigations..."
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 7. General Advise */}
+                <div className="mb-6">
+                  <label className="block text-md font-medium text-gray-700 mb-2">7. General Advise</label>
+                  <textarea
+                    value={prescriptionData.generalAdvise}
+                    onChange={(e) => setPrescriptionData(prev => ({ ...prev, generalAdvise: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={4}
+                    placeholder="General advice for the patient..."
+                  />
+                </div>
+
+                {/* 8. Medical Advise */}
+                <div className="mb-6">
+                  <MedicineDropdown
+                    selectedMedicines={prescriptionData.medicalAdvise}
+                    onChange={(medicines) => setPrescriptionData(prev => ({ ...prev, medicalAdvise: medicines }))}
+                    placeholder="Select Medicine..."
+                    label="8. Medical Advise"
+                  />
+                </div>
 
 
-            {/* Save and Clear Buttons */}
-            <div className="flex justify-between items-center">
-              <button
-                onClick={handleSavePrescription}
-                disabled={isSaving}
-                className={`px-6 py-2 text-white rounded flex items-center gap-2 ${
-                  isSaving 
-                    ? 'bg-purple-400 cursor-not-allowed' 
-                    : 'bg-purple-600 hover:bg-purple-700'
-                }`}
-              >
-                <span>💾</span> {isSaving ? 'Saving...' : 'Save Prescription'}
-              </button>
-              
-              <button
-                onClick={() => setPrescriptionData({
-                  chiefComplaints: { painComplaint: '', location: '', duration: '' },
-                  presentHistory: '',
-                  pastHistory: '',
-                  drugHistory: '',
-                  localExamination: '',
-                  investigation: [],
-                  investigationReference: '',
-                  generalAdvise: '',
-                  medicalAdvise: []
-                })}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
-              >
-                Clear All
-              </button>
-            </div>
+                {/* Save and Clear Buttons */}
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={handleSavePrescription}
+                    disabled={isSaving}
+                    className={`px-6 py-2 text-white rounded flex items-center gap-2 ${isSaving
+                      ? 'bg-purple-400 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700'
+                      }`}
+                  >
+                    <span>💾</span> {isSaving ? 'Saving...' : 'Save Prescription'}
+                  </button>
+
+                  <button
+                    onClick={() => setPrescriptionData({
+                      chiefComplaints: { painComplaint: '', location: '', duration: '' },
+                      presentHistory: '',
+                      pastHistory: '',
+                      drugHistory: '',
+                      localExamination: '',
+                      investigation: [],
+                      investigationReference: '',
+                      generalAdvise: '',
+                      medicalAdvise: []
+                    })}
+                    className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm"
+                  >
+                    Clear All
+                  </button>
+                </div>
               </>
             )}
           </div>
         )}
 
         {/* Prescription Content */}
-        <div 
-          id="prescription-content" 
+        <div
+          id="prescription-content"
           className="relative w-full h-[842px] bg-cover bg-center bg-no-repeat print:w-[297mm] print:h-[420mm]"
-          style={{ 
+          style={{
             backgroundImage: `url(/sevasangraha-prescription-template.png?t=${Date.now()})`,
             backgroundSize: '100% 100%',
             backgroundPosition: 'center'
@@ -1618,26 +1616,26 @@ const SevasangrahaPrescription: React.FC<SevasangrahaPrescriptionProps> = ({ pat
             <div className="font-bold text-3xl uppercase leading-tight break-words" style={{ fontFamily: 'Canva Sans, sans-serif', color: '#4E1BB2' }}>
               {getDoctorInfo().name}
             </div>
-            
+
             {/* Doctor Degree - Just below name */}
             {getDoctorInfo().degree && (
               <div className="text-lg mt-2 font-medium text-gray-700" style={{ fontFamily: 'Canva Sans, sans-serif', whiteSpace: 'pre-line' }}>
                 {getDoctorInfo().degree}
               </div>
             )}
-            
+
             {/* Department - Below degree */}
             <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
               {getDepartmentName()}
             </div>
-            
+
             {/* Specialty - Below department (only show if different from degree) */}
             {getDoctorInfo().specialty && getDoctorInfo().specialty !== getDoctorInfo().degree && (
               <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>
                 Specialty: {getDoctorInfo().specialty}
               </div>
             )}
-            
+
             {/* Hospital Experience - Below specialty */}
             {getDoctorInfo().hospital_experience && (
               <div className="text-lg mt-1 font-bold text-gray-600" style={{ fontFamily: 'Canva Sans, sans-serif' }}>

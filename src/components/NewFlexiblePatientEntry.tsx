@@ -6,7 +6,16 @@ import HospitalService from '../services/hospitalService';
 import SMSService from '../services/smsService';
 import { PatientService } from '../services/patientService';
 import { appointmentService } from '../services/appointmentService';
-import DoctorService, { DOCTORS_DATA, DEPARTMENTS } from '../services/doctorService';
+import DoctorService from '../services/doctorService';
+
+// Doctors and Departments data (Local definition to prevent import cycles)
+const DOCTORS_DATA = [
+  { name: 'DR. HEMANT KHAJJA', department: 'KNEE' },
+  { name: 'DR. HEMANT KHAJJA', department: 'SPORTS' }
+];
+
+// Get unique departments
+const DEPARTMENTS = [...new Set(DOCTORS_DATA.map(doc => doc.department))].sort();
 
 // Aadhaar Verhoeff validation
 const validateAadhaarFormat = (aadhaar: string): boolean => {

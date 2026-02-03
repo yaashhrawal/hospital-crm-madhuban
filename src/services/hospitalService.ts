@@ -829,11 +829,13 @@ export class HospitalService {
 
   static async getDoctors(): Promise<User[]> {
     try {
-      logger.log('👨‍⚕️ Fetching doctors from backend...');
-      const response = await axios.get(`${this.getBaseUrl()}/api/doctors`, {
-        headers: this.getHeaders()
-      });
-      return response.data || [];
+      logger.log('👨‍⚕️ Fetching doctors from dataService (Hardcoded)...');
+      // Use dataService to get the hardcoded list of doctors immediately
+      // This bypasses the API call to ensure the limited doctor list (Knee/Sports) is used
+      const doctors = await dataService.getDoctors();
+
+      // Convert Doctor[] to User[] format if necessary, though they are likely compatible enough for the UI
+      return doctors as unknown as User[];
     } catch (error: any) {
       logger.error('Error fetching doctors:', error);
       throw error;

@@ -6,42 +6,7 @@ import HospitalService from '../services/hospitalService';
 import SMSService from '../services/smsService';
 import { PatientService } from '../services/patientService';
 import { appointmentService } from '../services/appointmentService';
-import DoctorService from '../services/doctorService';
-import type { CreatePatientData, CreateTransactionData, AssignedDoctor } from '../config/supabaseNew';
-import {
-  User,
-  Stethoscope,
-  CreditCard,
-  Calendar,
-  ChevronRight,
-  Check,
-  UserPlus,
-  Building2
-} from 'lucide-react';
-import { logger } from '../utils/logger';
-import { parseLocalDate } from '../utils';
-import { PatientPhotoUpload } from './forms/PatientPhotoUpload';
-
-// Doctors and Departments data
-const DOCTORS_DATA = [
-  { name: 'DR. HEMANT KHAJJA', department: 'ORTHOPAEDIC' },
-  { name: 'DR. HEMANT', department: 'ORTHO' },
-  { name: 'DR. LALITA SUWALKA', department: 'DIETICIAN' },
-  { name: 'DR. MILIND KIRIT AKHANI', department: 'GASTRO' },
-  { name: 'DR MEETU BABLE', department: 'GYN.' },
-  { name: 'DR. AMIT PATANVADIYA', department: 'NEUROLOGY' },
-  { name: 'DR. KISHAN PATEL', department: 'UROLOGY' },
-  { name: 'DR. PARTH SHAH', department: 'SURGICAL ONCOLOGY' },
-  { name: 'DR.RAJEEDP GUPTA', department: 'MEDICAL ONCOLOGY' },
-  { name: 'DR. KULDDEP VALA', department: 'NEUROSURGERY' },
-  { name: 'DR. KURNAL PATEL', department: 'UROLOGY' },
-  { name: 'DR. SAURABH GUPTA', department: 'ENDOCRINOLOGY' },
-  { name: 'DR. BATUL PEEPAWALA', department: 'GENERAL PHYSICIAN' },
-  { name: 'DR. POONAM JAIN', department: 'PHYSIOTHERAPY' }
-];
-
-// Get unique departments
-const DEPARTMENTS = [...new Set(DOCTORS_DATA.map(doc => doc.department))].sort();
+import DoctorService, { DOCTORS_DATA, DEPARTMENTS } from '../services/doctorService';
 
 // Aadhaar Verhoeff validation
 const validateAadhaarFormat = (aadhaar: string): boolean => {

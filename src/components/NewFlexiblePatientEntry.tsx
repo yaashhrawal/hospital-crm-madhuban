@@ -2,11 +2,29 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import {
+  ChevronRight,
+  Check,
+  Stethoscope,
+  Calendar,
+  CreditCard,
+  User as UserIcon,
+  Search,
+  Plus,
+  X,
+  FileText,
+  Clock,
+  AlertCircle
+} from 'lucide-react';
 import HospitalService from '../services/hospitalService';
 import SMSService from '../services/smsService';
 import { PatientService } from '../services/patientService';
 import { appointmentService } from '../services/appointmentService';
 import DoctorService from '../services/doctorService';
+import { logger } from '../utils/logger';
+import { User } from '../config/supabaseNew';
+// import PatientPhotoUpload from './PatientPhotoUpload'; // Assuming this exists or will be mocked
+
 
 // Doctors and Departments data (Local definition to prevent import cycles)
 const DOCTORS_DATA = [

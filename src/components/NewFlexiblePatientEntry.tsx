@@ -189,36 +189,52 @@ const NewFlexiblePatientEntry: React.FC = () => {
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        const status = await HospitalService.getConnectionStatus();
+        let status = 'connected';
+        try {
+          status = await HospitalService.getConnectionStatus();
+        } catch (e) {
+          console.warn('Connection status check failed:', e);
+          status = 'offline';
+        }
         setConnectionStatus(status);
 
-        // Fetch doctors
-        const docs = await HospitalService.getDoctors();
-        if (docs && docs.length > 0) {
-          setDbDoctors(docs);
-          // Map DB doctors to compatible format for dropdown if needed, 
-          // but we will prioritize matching DB doctors by name/department
-          const formattedDocs = docs.map(d => ({
-            id: d.id,
-            name: `DR. ${d.first_name} ${d.last_name}`.toUpperCase(),
-            department: d.department?.toUpperCase() || 'GENERAL',
-            consultationFee: d.consultation_fee
-          }));
-
-          // Merge legacy and DB doctors for display, prioritizing DB info if needed
-          // or just use DB doctors entirely if possible.
-          // For safety, we keep legacy list but know that real functionality (Queue) needs DB ID.
-          setDbDoctors(formattedDocs);
+        // Fetch doctors with safety check
+        try {
+          const docs = await HospitalService.getDoctors();
+          if (docs && Array.isArray(docs) && docs.length > 0) {
+            setDbDoctors(docs);
+            // Map DB doctors to compatible format for dropdown
+            const formattedDocs = docs.map(d => ({
+              id: d.id,
+              name: `DR. ${d.first_name || ''} ${d.last_name || ''}`.trim().toUpperCase(),
+              department: (d.department || 'GENERAL').toUpperCase(),
+              consultationFee: d.consultation_fee
+            }));
+            setDbDoctors(formattedDocs);
+          }
+        } catch (e) {
+          console.warn('Failed to fetch doctors:', e);
+          // Fallback to local data is already handled by initial state
         }
 
-        // Fetch next UHID for display
+        // Fetch next UHID for display with safety check
         setUhidLoading(true);
-        const uhidResult = await PatientService.getNextUHID();
-        setNextUhid(uhidResult.next_uhid);
+        try {
+          const uhidResult = await PatientService.getNextUHID();
+          if (uhidResult && uhidResult.next_uhid) {
+            setNextUhid(uhidResult.next_uhid);
+          } else {
+            setNextUhid('P-NEW');
+          }
+        } catch (e) {
+          console.warn('Failed to fetch UHID:', e);
+          setNextUhid('P-NEW');
+        }
         setUhidLoading(false);
       } catch (e) {
-        console.error('Init error:', e);
+        console.error('Init error in NewFlexiblePatientEntry:', e);
         setUhidLoading(false);
+        // Ensure we don't block the UI
       }
     };
     checkConnection();

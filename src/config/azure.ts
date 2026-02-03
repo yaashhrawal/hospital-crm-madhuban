@@ -405,5 +405,5 @@ export const APPOINTMENT_STATUS = [
 ];
 
 // Export everything for backwards compatibility
-export * from './azure';
+// export * from './azure'; // Removed circular self-reference
 export default azureClient;

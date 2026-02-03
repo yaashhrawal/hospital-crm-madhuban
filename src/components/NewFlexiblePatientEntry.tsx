@@ -22,7 +22,7 @@ import { PatientService } from '../services/patientService';
 import { appointmentService } from '../services/appointmentService';
 import DoctorService from '../services/doctorService';
 import { logger } from '../utils/logger';
-import { User } from '../config/supabaseNew';
+import type { User } from '../config/azure';
 // import PatientPhotoUpload from './PatientPhotoUpload'; // Assuming this exists or will be mocked
 
 

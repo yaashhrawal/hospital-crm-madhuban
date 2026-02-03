@@ -3,7 +3,7 @@ import { authService } from '../services/authService';
 import type { LoginCredentials, RegisterData } from '../services/authService';
 import type { AuthUser } from '../config/supabaseNew';
 import { logger, setLoggerPermissions } from '../utils/logger';
-import { setUserStatus } from '../utils/smartConsoleBlocker';
+// import { setUserStatus } from '../utils/smartConsoleBlocker'; // Disabled for debugging
 import { setDevToolsAccess } from '../utils/devToolsBlocker';
 
 interface AuthContextType {

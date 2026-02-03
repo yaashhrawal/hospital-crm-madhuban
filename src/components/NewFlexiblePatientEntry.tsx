@@ -2697,7 +2697,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
                                 }}
                               >
                                 <option value="">Select Department</option>
-                                {DEPARTMENTS.map(dept => (
+                                {(DEPARTMENTS || []).map(dept => (
                                   <option key={dept} value={dept}>{dept}</option>
                                 ))}
                               </select>

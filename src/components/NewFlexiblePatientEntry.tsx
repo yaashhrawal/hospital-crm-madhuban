@@ -25,6 +25,23 @@ import { logger } from '../utils/logger';
 import type { User } from '../config/azure';
 // import PatientPhotoUpload from './PatientPhotoUpload'; // Assuming this exists or will be mocked
 
+// Mock PatientPhotoUpload to prevent crash
+const PatientPhotoUpload = ({ value, onChange, disabled }: any) => {
+  return (
+    <div className="p-4 border border-dashed rounded bg-gray-50 text-center text-gray-400">
+      Photo Upload Disabled (Mock)
+    </div>
+  );
+};
+
+// Utility to parse dates safely
+const parseLocalDate = (dateString: string | undefined): Date => {
+  if (!dateString) return new Date();
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? new Date() : date;
+};
+
+
 
 // Doctors and Departments data (Local definition to prevent import cycles)
 const DOCTORS_DATA = [
@@ -1290,7 +1307,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
               <div style={{ backgroundColor: '#FFFFFF', borderRadius: '12px', padding: '24px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' }}>
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2">
-                    <User className="w-5 h-5" style={{ color: '#0056B3' }} />
+                    <UserIcon className="w-5 h-5" style={{ color: '#0056B3' }} />
                     <h2 style={{ fontSize: '24px', color: '#0056B3', fontWeight: '600' }}>Patient Information</h2>
                   </div>
                   {/* UHID Display */}

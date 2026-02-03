@@ -199,11 +199,12 @@ const NewFlexiblePatientEntry: React.FC = () => {
         setConnectionStatus(status);
 
         // Fetch doctors with safety check
+        /* 
+        // TEMPORARILY DISABLED: Relying on local DOCTORS_DATA for stability
         try {
           const docs = await HospitalService.getDoctors();
           if (docs && Array.isArray(docs) && docs.length > 0) {
             setDbDoctors(docs);
-            // Map DB doctors to compatible format for dropdown
             const formattedDocs = docs.map(d => ({
               id: d.id,
               name: `DR. ${d.first_name || ''} ${d.last_name || ''}`.trim().toUpperCase(),
@@ -214,8 +215,15 @@ const NewFlexiblePatientEntry: React.FC = () => {
           }
         } catch (e) {
           console.warn('Failed to fetch doctors:', e);
-          // Fallback to local data is already handled by initial state
         }
+        */
+        // Use local data explicitly
+        setDbDoctors(DOCTORS_DATA.map((d, i) => ({
+          id: `doc-${i}`,
+          name: d.name,
+          department: d.department,
+          consultationFee: 0
+        })));
 
         // Fetch next UHID for display with safety check
         setUhidLoading(true);

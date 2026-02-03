@@ -157,7 +157,8 @@ const NewFlexiblePatientEntry: React.FC = () => {
   const [dbDoctors, setDbDoctors] = useState<any[]>([]); // New state for DB doctors
   const [nextUhid, setNextUhid] = useState<string>(''); // UHID preview for new patients
   const [uhidLoading, setUhidLoading] = useState(false);
-  const [filteredDoctors, setFilteredDoctors] = useState(DOCTORS_DATA);
+  // Initialize with fallback to empty array to prevent crashes if import fails
+  const [filteredDoctors, setFilteredDoctors] = useState(DOCTORS_DATA || []);
   const [selectedDoctors, setSelectedDoctors] = useState<any[]>([]);
   const [tempDepartment, setTempDepartment] = useState('');
   const [tempDoctor, setTempDoctor] = useState('');
@@ -2054,7 +2055,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
                         onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
                       >
                         <option value="">Select Department</option>
-                        {DEPARTMENTS.map(dept => (
+                        {(DEPARTMENTS || []).map(dept => (
                           <option key={dept} value={dept}>{dept}</option>
                         ))}
                         <option value="CUSTOM">Custom Department</option>
@@ -2177,7 +2178,7 @@ const NewFlexiblePatientEntry: React.FC = () => {
                           onBlur={(e) => e.currentTarget.style.borderColor = '#CCCCCC'}
                         >
                           <option value="">Select Department</option>
-                          {DEPARTMENTS.map(dept => (
+                          {(DEPARTMENTS || []).map(dept => (
                             <option key={dept} value={dept}>{dept}</option>
                           ))}
                         </select>

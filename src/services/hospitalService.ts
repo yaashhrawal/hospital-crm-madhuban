@@ -18,7 +18,6 @@ import type {
 } from '../config/supabaseNew';
 
 import { supabase } from '../config/supabase'; // Keep for legacy
-import dataService from './dataService';
 import { HOSPITAL_ID } from '../config/supabaseNew';
 const HOSPITAL_ID_OLD = 'b8a8c5e2-5c4d-4a8b-9e6f-3d2c1a0b9c8d'; // Default hospital ID
 

@@ -142,27 +142,19 @@ class DataService {
   private getHardcodedDoctors(): Doctor[] {
     return [
       {
-        id: 'hemant-khajja',
+        id: 'hemant-khajja-knee',
         name: 'DR. HEMANT KHAJJA',
-        department: 'ORTHOPAEDIC',
-        specialization: 'Orthopaedic Surgeon',
+        department: 'KNEE',
+        specialization: 'Knee Specialist',
         fee: 800,
         is_active: true
       },
       {
-        id: 'lalita-suwalka',
-        name: 'DR. LALITA SUWALKA',
-        department: 'DIETICIAN',
-        specialization: 'Clinical Dietician',
-        fee: 500,
-        is_active: true
-      },
-      {
-        id: 'poonam-jain-physiotherapy',
-        name: 'DR. POONAM JAIN',
-        department: 'PHYSIOTHERAPY',
-        specialization: 'Physiotherapist',
-        fee: 600,
+        id: 'hemant-khajja-sports',
+        name: 'DR. HEMANT KHAJJA',
+        department: 'SPORTS',
+        specialization: 'Sports Medicine',
+        fee: 800,
         is_active: true
       }
     ];
@@ -188,21 +180,15 @@ class DataService {
   private getHardcodedDepartments(): Department[] {
     return [
       {
-        id: 'orthopaedic-dept',
-        name: 'ORTHOPAEDIC',
-        description: 'Orthopaedic Surgery and Bone Care',
+        id: 'knee-dept',
+        name: 'KNEE',
+        description: 'Knee Surgery and Care',
         is_active: true
       },
       {
-        id: 'dietician-dept',
-        name: 'DIETICIAN',
-        description: 'Nutrition and Diet Planning',
-        is_active: true
-      },
-      {
-        id: 'physiotherapy-dept',
-        name: 'PHYSIOTHERAPY',
-        description: 'Physiotherapy and Rehabilitation',
+        id: 'sports-dept',
+        name: 'SPORTS',
+        description: 'Sports Medicine and Rehabilitation',
         is_active: true
       }
     ];

@@ -44,12 +44,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
 
       setLoggerPermissions(userIsAdmin, user.email || '');
-      setUserStatus(userIsAdmin, user.email || '');
+      // setUserStatus(userIsAdmin, user.email || ''); // Console blocking disabled
       setDevToolsAccess(userIsAdmin, user.email || '');
     } else {
       (window as any).authDebug = { isAdmin: false, email: null };
       setLoggerPermissions(false, '');
-      setUserStatus(false, '');
+      // setUserStatus(false, ''); // Console blocking disabled
       setDevToolsAccess(false, '');
     }
   }, [user]);
@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         if (currentUser) {
           const userIsAdmin = authService.isAdmin(currentUser) || currentUser.email === 'admin@indic.com' || currentUser.email === 'meenal@indic.com' || currentUser.email === 'admin@hospital.com';
           setLoggerPermissions(userIsAdmin, currentUser.email || '');
-          setUserStatus(userIsAdmin, currentUser.email || '');
+          // setUserStatus(userIsAdmin, currentUser.email || ''); // Console blocking disabled
           setDevToolsAccess(userIsAdmin, currentUser.email || '');
         }
       } catch (error) {

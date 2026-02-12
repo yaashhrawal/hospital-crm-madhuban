@@ -29,13 +29,15 @@ CREATE TABLE IF NOT EXISTS ipd_bills (
 CREATE INDEX IF NOT EXISTS idx_ipd_bills_patient_id ON ipd_bills(patient_id);
 CREATE INDEX IF NOT EXISTS idx_ipd_bills_bill_date ON ipd_bills(bill_date);
 
--- 2. Add hospital_id column to patient_transactions (if not exists)
+-- 2. Add missing columns to patient_transactions (if not exists)
 ALTER TABLE patient_transactions 
-ADD COLUMN IF NOT EXISTS hospital_id UUID;
+ADD COLUMN IF NOT EXISTS hospital_id UUID,
+ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(100);
 
--- Optional: Add hospital_id to ipd_bills as well for consistency
+-- Optional: Add columns to ipd_bills as well for consistency
 ALTER TABLE ipd_bills
-ADD COLUMN IF NOT EXISTS hospital_id UUID;
+ADD COLUMN IF NOT EXISTS hospital_id UUID,
+ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(100);
 
 -- 3. Add hospital_id to any other relevant tables if missing (good practice)
 ALTER TABLE patients

@@ -35,11 +35,17 @@ ADD COLUMN IF NOT EXISTS hospital_id UUID,
 ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(100),
 ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
 
+-- Fix NOT NULL constraint on department if it exists
+ALTER TABLE patient_transactions ALTER COLUMN department DROP NOT NULL;
+
 -- Optional: Add columns to ipd_bills as well for consistency
 ALTER TABLE ipd_bills
 ADD COLUMN IF NOT EXISTS hospital_id UUID,
 ADD COLUMN IF NOT EXISTS transaction_reference VARCHAR(100),
-ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS department VARCHAR(100);
+
+ALTER TABLE ipd_bills ALTER COLUMN department DROP NOT NULL;
 
 -- 3. Add hospital_id to any other relevant tables if missing (good practice)
 ALTER TABLE patients

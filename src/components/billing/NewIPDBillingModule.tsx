@@ -1387,6 +1387,7 @@ const NewIPDBillingModule: React.FC = () => {
         payment_mode: newPaymentMode.toUpperCase(),
         doctor_id: null,
         doctor_name: null,
+        department: selectedPatient?.room_type || 'IPD',
         status: 'COMPLETED',
         transaction_reference: uniqueReceiptNo,
         transaction_date: formattedDepositDate,

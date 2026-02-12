@@ -1238,8 +1238,10 @@ app.post('/api/admissions', authenticateToken, async (req, res) => {
           description,
           transaction_date,
           created_by,
-          status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          status,
+          department,
+          hospital_id
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           patient_id,
           amount,
@@ -1247,7 +1249,9 @@ app.post('/api/admissions', authenticateToken, async (req, res) => {
           `Advance payment at admission (Bed ${bed_number})`,
           admission_date || new Date(),
           req.user.id,
-          'completed'
+          'completed',
+          'IPD', // Default for admission deposit
+          req.body.hospital_id || null
         ]
       );
     }

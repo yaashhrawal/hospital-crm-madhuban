@@ -229,7 +229,6 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
                   value={formData.patientId}
                   onChange={(e) => handleInputChange('patientId', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
                 />
               </div>
 
@@ -242,7 +241,6 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
                   value={formData.ipNo}
                   onChange={(e) => handleInputChange('ipNo', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
                 />
               </div>
 
@@ -255,7 +253,6 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
                   value={formData.patientFullName}
                   onChange={(e) => handleInputChange('patientFullName', e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
                 />
               </div>
 

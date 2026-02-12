@@ -1384,7 +1384,7 @@ const NewIPDBillingModule: React.FC = () => {
         transaction_type: 'ADMISSION_FEE',
         description: `IPD Advance Payment - Receipt: ${uniqueReceiptNo}${referenceNo ? ` - Ref: ${referenceNo}` : ''}`,
         amount: amount,
-        payment_mode: newPaymentMode.toUpperCase(),
+        payment_mode: newPaymentMode.toLowerCase(), // FIXED: Use lowercase to match DB constraint
         doctor_id: null,
         doctor_name: null,
         department: selectedPatient?.room_type || 'IPD',

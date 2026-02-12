@@ -1001,7 +1001,7 @@ const NewIPDBillingModule: React.FC = () => {
         .from('patient_transactions')
         .select('id, transaction_date, created_at, description, amount, payment_mode, transaction_reference, status')
         .eq('patient_id', selectedPatient.id)
-        .in('transaction_type', ['ADMISSION_FEE', 'DEPOSIT', 'ADVANCE_PAYMENT'])
+        .in('transaction_type', ['admission', 'deposit', 'advance', 'ADMISSION_FEE', 'DEPOSIT', 'ADVANCE_PAYMENT']) // Support both old and new formats
         .eq('status', 'COMPLETED')
         .order('created_at', { ascending: false });
 

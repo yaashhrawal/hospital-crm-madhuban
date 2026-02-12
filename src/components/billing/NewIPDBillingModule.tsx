@@ -4452,8 +4452,11 @@ const NewIPDBillingModule: React.FC = () => {
                 </div>
               ) : filteredPatients.length > 0 ? (
                 filteredPatients.map((patient) => {
-                  const latestAdmission = patient.admissions?.[0];
-                  const isAdmitted = latestAdmission && !latestAdmission.actual_discharge_date;
+                  // Find active admission (one without discharge date)
+                  const activeAdmission = patient.admissions?.find((a: any) => !a.actual_discharge_date);
+                  // If no active admission, show the most recent past admission
+                  const latestAdmission = activeAdmission || patient.admissions?.[0];
+                  const isAdmitted = !!activeAdmission;
 
                   return (
                     <div

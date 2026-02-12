@@ -44,6 +44,7 @@ const IPDSummaryModule: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentMode, setPaymentMode] = useState('CASH');
+  const [summaryType, setSummaryType] = useState('Interim Bill'); // New state for summary type
 
   // Load IPD summaries from database
   const loadIPDSummaries = async () => {
@@ -82,6 +83,7 @@ const IPDSummaryModule: React.FC = () => {
     services: Array<{ id: string; service: string; qty: number; amount: number; }>;
     total: number;
     paymentMode: string;
+    summaryType: string; // New field
   }) => {
     try {
       const summaryReference = `IPD-${Date.now()}`;
@@ -94,6 +96,7 @@ const IPDSummaryModule: React.FC = () => {
           services: summaryData.services,
           total_amount: summaryData.total,
           payment_mode: summaryData.paymentMode,
+          summary_type: summaryData.summaryType, // Save summary type
           hospital_id: HOSPITAL_ID,
           created_by: 'system'
         })
@@ -256,7 +259,8 @@ const IPDSummaryModule: React.FC = () => {
         patient: selectedPatient,
         services: validServices,
         total,
-        paymentMode
+        paymentMode,
+        summaryType // Pass summary type
       });
 
       if (savedSummary) {
@@ -267,6 +271,7 @@ const IPDSummaryModule: React.FC = () => {
         setSelectedPatient(null);
         setServices([]);
         setPaymentMode('CASH');
+        setSummaryType('Interim Bill'); // Reset summary type
         setShowCreateSummary(false);
         setSearchTerm('');
       }
@@ -991,9 +996,8 @@ const IPDSummaryModule: React.FC = () => {
                           <div
                             key={patient.id}
                             onClick={() => setSelectedPatient(patient)}
-                            className={`p-3 cursor-pointer hover:bg-gray-50 border-b ${
-                              selectedPatient?.id === patient.id ? 'bg-blue-50 border-blue-200' : ''
-                            }`}
+                            className={`p-3 cursor-pointer hover:bg-gray-50 border-b ${selectedPatient?.id === patient.id ? 'bg-blue-50 border-blue-200' : ''
+                              }`}
                           >
                             <div className="font-medium">{patient.first_name} {patient.last_name}</div>
                             <div className="text-sm text-gray-500">ID: {patient.patient_id} | Age: {patient.age} | {patient.gender}</div>
@@ -1148,6 +1152,9 @@ const IPDSummaryModule: React.FC = () => {
                     Patient Details
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Services Count
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1179,6 +1186,22 @@ const IPDSummaryModule: React.FC = () => {
                         <div className="text-gray-500 text-xs">ID: {summary.patient.patient_id}</div>
                         <div className="text-gray-500 text-xs">Age: {summary.patient.age} | {summary.patient.gender}</div>
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${summary.summary_type === 'Final Bill' ? 'bg-green-100 text-green-800' :
+                        summary.summary_type === 'Discharge Summary' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                        {summary.summary_type || 'Interim Bill'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${summary.summary_type === 'Final Bill' ? 'bg-green-100 text-green-800' :
+                          summary.summary_type === 'Discharge Summary' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                        }`}>
+                        {summary.summary_type || 'Interim Bill'}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">

@@ -208,6 +208,7 @@ export interface IPDSummary {
   }>;
   total_amount: number;
   payment_mode: 'CASH' | 'UPI' | 'CARD' | 'BANK_TRANSFER' | 'INSURANCE' | 'SUMMARY';
+  summary_type?: string; // New field
   notes?: string;
   hospital_id: string;
   created_at: string;

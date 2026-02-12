@@ -1171,6 +1171,10 @@ app.post('/api/admissions', authenticateToken, async (req, res) => {
       advance_amount // New field for advance payment
     } = req.body;
 
+    console.log('📝 [API] Received admission request:', {
+      patient_id, bed_id, bed_number, admission_type, treating_doctor, advance_amount
+    });
+
     // Start transaction
     await pool.query('BEGIN');
 
@@ -1189,8 +1193,9 @@ app.post('/api/admissions', authenticateToken, async (req, res) => {
         history_present_illness, status, total_amount, 
         admission_type, attendant_name, attendant_relation, attendant_phone,
         insurance_provider, policy_number,
+        doctor_name, ipd_number,
         created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING *`,
       [
         patient_id,
@@ -1209,6 +1214,9 @@ app.post('/api/admissions', authenticateToken, async (req, res) => {
         attendant_phone || null,
         insurance_provider || null,
         policy_number || null,
+        // Add mapping for doctor_name and ipd_number if provided
+        (treating_doctor && treating_doctor.length !== 36) ? treating_doctor : null, // doctor_name (if not UUID)
+        req.body.ipd_number || null, // ipd_number
         req.user.id
       ]
     );
@@ -1248,21 +1256,7 @@ app.post('/api/admissions', authenticateToken, async (req, res) => {
     res.status(201).json(admissionResult.rows[0]);
   } catch (error) {
     await pool.query('ROLLBACK');
-    console.error('Error creating admission:', error);
-
-    // Detailed file logging for diagnostics
-    try {
-      const fs = require('fs');
-      const logMsg = `\n[${new Date().toISOString()}] Admission Error:\n` +
-        `Payload: ${JSON.stringify(req.body)}\n` +
-        `Error: ${error.message}\n` +
-        `Stack: ${error.stack}\n` +
-        '-------------------------------------------\n';
-      fs.appendFileSync('/tmp/admission_debug.log', logMsg);
-    } catch (logErr) {
-      console.error('Failed to write to debug log:', logErr);
-    }
-
+    console.error('❌ Error creating admission:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });

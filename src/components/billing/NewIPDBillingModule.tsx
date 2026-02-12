@@ -1203,205 +1203,27 @@ const NewIPDBillingModule: React.FC = () => {
     try {
       setBillsLoading(true);
 
-      // Get all active admissions to map bed info
-      const { data: activeAdmissions, error: admissionError } = await supabase
-        .from('patient_admissions')
-        .select(`
-          patient_id,
-          bed_number,
-          room_type,
-          admission_date,
-          discharge_date,
-          ipd_number,
-          doctor_name,
-          treating_doctor,
-          patient:patients(id, patient_id)
-        `)
-        .is('discharge_date', null);
+      // Load IPD bills from the dedicated table
+      const bills = await BillingService.getIPDBills();
+      logger.log('✅ Loaded IPD bills via Service:', bills.length);
 
-      if (admissionError) {
-        logger.error('❌ Error loading active admissions:', admissionError);
-      }
+      // Sort by date descending
+      bills.sort((a, b) => new Date(b.billDate || b.date || 0).getTime() - new Date(a.billDate || a.date || 0).getTime());
 
-      // Create a map of patient_id -> bed info for quick lookup
-      const bedInfoMap = new Map();
-      const bedInfoByPatientDbId = new Map();
+      setIpdBills(bills);
 
-      if (activeAdmissions) {
-        activeAdmissions.forEach(admission => {
-          const info = {
-            bed_number: admission.bed_number,
-            room_type: admission.room_type,
-            admission_date: admission.admission_date,
-            ipd_number: admission.ipd_number,
-            assigned_doctor: admission.doctor_name || admission.treating_doctor
-          };
-
-          if (admission.patient?.patient_id) {
-            bedInfoMap.set(admission.patient.patient_id, info);
-          }
-          if (admission.patient?.id) {
-            bedInfoByPatientDbId.set(admission.patient.id, info);
-          }
-        });
-      }
-
-      // Load all IPD transactions
-      const { data: ipdTransactions, error: billsError } = await supabase
-        .from('patient_transactions')
-        .select(`
-          *,
-          patients (
-            id,
-            first_name,
-            last_name,
-            patient_id,
-            phone,
-            gender,
-            age,
-            ipd_bed_number,
-            admission_date,
-            room_type,
-            ipd_number,
-            assigned_doctor,
-            admissions:patient_admissions (
-              admission_date,
-              discharge_date,
-              ipd_number,
-              doctor_name,
-              treating_doctor
-            )
-          )
-        `)
-        .in('transaction_type', ['SERVICE', 'ADMISSION_FEE', 'DEPOSIT', 'ADVANCE_PAYMENT'])
-        .neq('status', 'DELETED')
-        .order('created_at', { ascending: false });
-
-      if (billsError) throw billsError;
-
-      logger.log('🛏️ Bed info mapping created for', bedInfoMap.size, 'patients (by string)');
-      logger.log('🛏️ Bed info mapping created for', bedInfoByPatientDbId.size, 'patients (by db ID)');
-      logger.log('🛏️ Bed info map contents:', Array.from(bedInfoMap.entries()));
-
-      // 🔍 DEBUG: Check admission data structure in first few transactions
-      if (ipdTransactions && ipdTransactions.length > 0) {
-        logger.log('🏥 ADMISSION DATA DEBUG - First transaction sample:', {
-          transaction_id: ipdTransactions[0].id,
-          has_patients: !!ipdTransactions[0].patients,
-          patient_data: ipdTransactions[0].patients,
-          admissions_exist: ipdTransactions[0].patients?.admissions,
-          admissions_count: ipdTransactions[0].patients?.admissions?.length || 0,
-          first_admission: ipdTransactions[0].patients?.admissions?.[0]
-        });
-      }
-
-      if (ipdTransactions && ipdTransactions.length > 0) {
-        logger.log('🔍 RAW TRANSACTION DATA (first 2):', ipdTransactions.slice(0, 2));
-
-        // Process transactions with patient data already joined
-        const enrichedTransactions = ipdTransactions.map((transaction, index) => {
-          // Try to get bed info using multiple approaches
-          let bedInfo = bedInfoMap.get(transaction.patient_id); // Try by patient_id string
-          if (!bedInfo && transaction.patients?.id) {
-            bedInfo = bedInfoByPatientDbId.get(transaction.patients.id); // Try by database ID
-          }
-          if (!bedInfo && transaction.patients?.patient_id) {
-            bedInfo = bedInfoMap.get(transaction.patients.patient_id); // Try by patient.patient_id
-          }
-
-          if (index < 3) { // Debug first 3 transactions
-            logger.log(`🔄 Transaction ${index} enrichment:`, {
-              transaction_id: transaction.id,
-              transaction_patient_id: transaction.patient_id,
-              patients_db_id: transaction.patients?.id,
-              patients_patient_id: transaction.patients?.patient_id,
-              bed_info_found: !!bedInfo,
-              bed_info: bedInfo,
-              original_patients: transaction.patients
-            });
-          }
-
-          return {
-            ...transaction,
-            patients: {
-              ...transaction.patients,
-              // Enrich with bed information and admissions data
-              ipd_bed_number: bedInfo?.bed_number || transaction.patients?.ipd_bed_number,
-              room_type: bedInfo?.room_type || transaction.patients?.room_type,
-              admission_date: bedInfo?.admission_date || transaction.patients?.admission_date,
-              // ✅ FIX: Try multiple sources for IPD number
-              ipd_number: bedInfo?.ipd_number ||
-                transaction.patients?.ipd_number ||
-                transaction.patients?.admissions?.[0]?.ipd_number ||
-                'N/A',
-              assigned_doctor: bedInfo?.assigned_doctor || transaction.patients?.assigned_doctor
-            },
-            // Add display type for UI - check description for IPD bills
-            display_type: (transaction.transaction_type === 'SERVICE' && transaction.description?.includes('[IPD_BILL]')) ? 'IPD Bill' :
-              transaction.transaction_type === 'SERVICE' ? 'Service Bill' : 'Deposit',
-            display_icon: transaction.transaction_type === 'SERVICE' ? '🧾' : '💰'
-          };
-        });
-
-        logger.log('💾 Processed IPD transactions with patient data:', enrichedTransactions.length);
-        logger.log('🔍 ENRICHED TRANSACTION DATA (first 2):', enrichedTransactions.slice(0, 2));
-        logger.log('🔍 FIRST ENRICHED PATIENT DATA:', enrichedTransactions[0]?.patients);
-
-        // 🔍 DEBUG: Check if patient age and gender are loaded
-        const firstTransaction = enrichedTransactions[0];
-        if (firstTransaction?.patients) {
-          logger.log('🔍 PATIENT DATA DEBUG - First transaction patient info:', {
-            'Patient name': `${firstTransaction.patients.first_name} ${firstTransaction.patients.last_name}`,
-            'Patient age': firstTransaction.patients.age,
-            'Patient gender': firstTransaction.patients.gender,
-            'Patient phone': firstTransaction.patients.phone,
-            'Patient ID': firstTransaction.patients.patient_id,
-            'Has age data?': firstTransaction.patients.age ? '✅ YES' : '❌ NO',
-            'Has gender data?': firstTransaction.patients.gender ? '✅ YES' : '❌ NO'
-          });
-        }
-
-
-        logger.log('🔄 Setting IPD bills state with:', enrichedTransactions.length, 'transactions');
-
-        // Sort by date descending to show latest first - CRITICAL FIX: Use transaction_date (user billing date) not created_at
-        enrichedTransactions.sort((a, b) => {
-          // Use transaction_date if available (user's billing date), otherwise fall back to created_at
-          const dateA = a.transaction_date || a.created_at;
-          const dateB = b.transaction_date || b.created_at;
-          return new Date(dateB).getTime() - new Date(dateA).getTime();
-        });
-
-        // Filter out deposit transactions - they belong in the Deposit Module only
-        const billsOnly = enrichedTransactions.filter(t =>
-          t.transaction_type === 'SERVICE' &&
-          !['ADMISSION_FEE', 'DEPOSIT', 'ADVANCE_PAYMENT'].includes(t.transaction_type)
-        );
-
-        setIpdBills([...billsOnly]); // Only include SERVICE bills, exclude deposits
-        const ipdBillCount = billsOnly.filter(t => t.description?.includes('[IPD_BILL]')).length;
-        const serviceBillCount = billsOnly.filter(t => !t.description?.includes('[IPD_BILL]')).length;
-        const depositCount = enrichedTransactions.filter(t => ['ADMISSION_FEE', 'DEPOSIT', 'ADVANCE_PAYMENT'].includes(t.transaction_type)).length;
-
-        logger.log('📋 Final transaction counts:', { ipdBillCount, serviceBillCount, depositCount, depositsSeparated: depositCount });
-      } else {
-        logger.log('ℹ️ No IPD transactions found');
-        setIpdBills([]);
-        toast('No IPD transactions found', {
-          icon: 'ℹ️',
-          duration: 3000
-        });
-      }
+      // Calculate stats
+      const ipdBillCount = bills.length;
+      logger.log('📋 Final bill counts:', { ipdBillCount });
 
     } catch (error: any) {
       logger.error('❌ CATCH: Failed to load IPD bills:', error);
-      setIpdBills([]); // Set empty array as fallback
-      toast.error(`Failed to load IPD bills: ${error.message || error}`);
+      toast.error(`Error loading bills: ${error.message || error}`);
+      setIpdBills([]);
     } finally {
       setBillsLoading(false);
     }
   };
-
   const updateRow = (id: string, field: keyof BillingRow, value: number | string) => {
     setBillingRows(rows => {
       return rows.map(row => {
@@ -2163,9 +1985,11 @@ const NewIPDBillingModule: React.FC = () => {
           totalCharge: calculateSegmentTotal(s)
         })),
         services: selectedServices.filter(s => s.selected).map(s => ({
+          id: s.id,
           name: s.name,
           selected: true,
-          amount: parseFloat(s.amount as any) || 0
+          amount: parseFloat(s.amount as any) || 0,
+          quantity: parseInt(s.quantity as any) || 1
         })),
         totalStayCharges: calculateTotalStayCharges(),
         totalServiceCharges: calculateSelectedServicesTotal(),
@@ -2213,8 +2037,8 @@ const NewIPDBillingModule: React.FC = () => {
   };
 
   const handleDeleteBill = async (bill: any) => {
-    const billRef = bill.transaction_reference || bill.id;
-    const patientName = `${bill.patients?.first_name || ''} ${bill.patients?.last_name || ''}`.trim() || 'Unknown Patient';
+    const billRef = bill.billId || bill.transaction_reference || bill.id;
+    const patientName = bill.patientName || `${bill.patients?.first_name || ''} ${bill.patients?.last_name || ''}`.trim() || 'Unknown Patient';
 
     const confirmDelete = window.confirm(
       `Are you sure you want to delete this IPD bill?\n\nBill: ${billRef}\nPatient: ${patientName}\nAmount: ₹${bill.amount?.toLocaleString() || '0'}\nStatus: ${bill.status}\n\nThis action cannot be undone.`
@@ -2282,14 +2106,13 @@ const NewIPDBillingModule: React.FC = () => {
     const generatePageHTML = (pageBills: any[], pageIndex: number) => {
       const rowsHTML = pageBills.map((bill, index) => {
         const globalIndex = pageIndex * BILLS_PER_PAGE + index + 1;
-        const patientName = bill.patients ?
-          `${bill.patients.first_name || ''} ${bill.patients.last_name || ''}`.trim() || 'Unknown Patient'
-          : 'Loading...';
-        const billId = bill.transaction_reference || bill.id || `BILL-${globalIndex}`;
+        const patientName = bill.patientName || (bill.patients ?
+          `${bill.patients.first_name || ''} ${bill.patients.last_name || ''}`.trim() : 'Unknown Patient');
+        const billId = bill.billId || bill.transaction_reference || bill.id || `BILL-${globalIndex}`;
         const doctor = bill.doctor_name || 'N/A';
-        const amount = bill.amount || 0;
+        const amount = bill.totalAmount || bill.amount || 0;
         const status = bill.status || 'UNKNOWN';
-        const date = formatLocalDate(bill.transaction_date || bill.created_at);
+        const date = formatLocalDate(bill.billDate || bill.transaction_date || bill.created_at);
 
         let statusClass = 'status-badge ';
         if (status === 'COMPLETED') statusClass += 'status-completed';
@@ -2647,9 +2470,9 @@ const NewIPDBillingModule: React.FC = () => {
           <div class="receipt-template">
             <!-- Header -->
             <div style="text-align: center; margin-bottom: 30px; border-bottom: 3px solid #0056B3; padding-bottom: 20px;">
-              <h1 style="color: #0056B3; font-size: 32px; font-weight: bold; margin: 0;">HOSPITAL CRM PRO</h1>
-              <p style="color: black; font-size: 16px; margin: 8px 0;">Complete Healthcare Management System</p>
-              <p style="color: black; font-size: 14px; margin: 0;">📍 Your Hospital Address | 📞 Contact Number | 📧 Email</p>
+              <h1 style="color: #0056B3; font-size: 32px; font-weight: bold; margin: 0;">The Madhuban Hospital</h1>
+              <p style="color: black; font-size: 16px; margin: 8px 0;">71/2b hospital road above anil clinic</p>
+              <p style="color: black; font-size: 14px; margin: 0;">Udaipur rajasthan 313001</p>
             </div>
 
             <!-- IPD DEPOSIT Title at Top Center -->
@@ -2848,9 +2671,9 @@ const NewIPDBillingModule: React.FC = () => {
       </head>
       <body>
         <div class="header">
-          <div class="hospital-name">HOSPITAL CRM PRO</div>
-          <div>Complete Healthcare Management System</div>
-          <div>📍 Your Hospital Address | 📞 Contact Number</div>
+          <div class="hospital-name">The Madhuban Hospital</div>
+          <div>71/2b hospital road above anil clinic</div>
+          <div>Udaipur rajasthan 313001</div>
         </div>
 
         <div class="bill-title">IPD FINAL BILL</div>
@@ -2956,6 +2779,18 @@ const NewIPDBillingModule: React.FC = () => {
     if (bill.patients) {
       setSelectedPatient(bill.patients);
       setPatientSearchTerm(`${bill.patients.first_name} ${bill.patients.last_name}`);
+    } else if (bill.patientId) {
+      // Attempt to find patient in loaded patients
+      const foundPatient = patients.find(p => p.patient_id === bill.patientId || p.id === bill.patientId);
+      if (foundPatient) {
+        logger.log('✅ Found patient for editing:', foundPatient.first_name);
+        setSelectedPatient(foundPatient);
+        setPatientSearchTerm(`${foundPatient.first_name} ${foundPatient.last_name}`);
+      } else {
+        logger.warn('⚠️ Patient not found in loaded list for ID:', bill.patientId);
+        // Fallback: Set search term at least so user sees the name
+        setPatientSearchTerm(bill.patientName || '');
+      }
     }
 
     // Set dates
@@ -2974,7 +2809,9 @@ const NewIPDBillingModule: React.FC = () => {
       // This might need more complex mapping depending on how services are stored vs displayed
       const mappedServices = bill.services.map((s: any) => ({
         ...s,
-        selected: true
+        selected: true,
+        id: s.id || `service-${Date.now()}-${Math.random()}`, // Ensure ID exists
+        quantity: s.quantity || 1
       }));
       setSelectedServices(mappedServices);
     }

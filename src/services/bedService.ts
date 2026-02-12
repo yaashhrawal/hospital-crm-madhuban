@@ -152,7 +152,8 @@ class BedService {
           attendant_phone: admissionData?.attendant_phone || '',
           insurance_provider: admissionData?.insurance_provider || '',
           policy_number: admissionData?.policy_number || '',
-          advance_amount: admissionData?.advance_amount || 0
+          advance_amount: admissionData?.advance_amount || 0,
+          ipd_number: ipdNumber // Add IPD number to payload
         },
         { headers: this.getHeaders() }
       );

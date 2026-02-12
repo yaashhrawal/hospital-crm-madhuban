@@ -9,8 +9,13 @@ import * as AzureConfig from './azure';
 // Re-export everything from azure config
 export * from './azure';
 
-// Legacy supabase export - DO NOT USE
-export const supabase = null as any;
+// Legacy supabase export - Restored for NewIPDBillingModule compatibility
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const HOSPITAL_ID = AzureConfig.HOSPITAL_ID;
 
 console.warn('⚠️ supabaseNew.ts is deprecated. Import from "./azure" instead.');
@@ -142,6 +147,7 @@ export interface PatientAdmission {
   balance: number;
   status: 'ACTIVE' | 'DISCHARGED' | 'TRANSFERRED';
   admitted_by: string;
+  ipd_number?: string;
   discharged_by?: string;
   hospital_id: string;
   created_at: string;

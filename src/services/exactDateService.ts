@@ -8,7 +8,7 @@ export class ExactDateService {
   }
 
   private static getBaseUrl() {
-    return import.meta.env.VITE_API_URL || 'http://localhost:3002';
+    return import.meta.env.VITE_API_URL || 'http://localhost:3001';
   }
 
   static async getPatientsForExactDate(dateStr: string, limit = 100): Promise<PatientWithRelations[]> {
@@ -65,7 +65,37 @@ export class ExactDateService {
 
     } catch (error: any) {
       console.error('❌ Error getting patients for exact date:', error);
-      return [];
+
+      // Fallback: LocalStorage
+      try {
+        const { default: localStorageService } = await import('./localStorageService');
+        const allPatients = await localStorageService.getPatients();
+
+        // Filter by date match
+        const filtered = allPatients.filter(p => p.created_at.startsWith(dateStr) || (p as any).date_of_entry?.startsWith(dateStr));
+
+        // Enrich
+        const enhanced = await Promise.all(filtered.map(async (p) => {
+          const txs = await localStorageService.getTransactionsByPatient(p.id);
+          const admissions = (await localStorageService.getActiveAdmissions()).filter(a => a.patient_id === p.id);
+          const totalSpent = txs.reduce((sum, t) => sum + t.amount, 0);
+
+          return {
+            ...p,
+            transactions: txs,
+            admissions: admissions,
+            totalSpent,
+            visitCount: 1,
+            lastVisit: p.created_at,
+            departmentStatus: admissions.length > 0 ? 'IPD' : 'OPD'
+          } as unknown as PatientWithRelations;
+        }));
+
+        return enhanced;
+      } catch (localError) {
+        console.error('❌ LocalStorage fallback failed:', localError);
+        return [];
+      }
     }
   }
 
@@ -123,7 +153,40 @@ export class ExactDateService {
 
     } catch (error: any) {
       console.error('❌ Error getting patients for date range:', error);
-      return [];
+
+      // Fallback: LocalStorage
+      try {
+        const { default: localStorageService } = await import('./localStorageService');
+        const allPatients = await localStorageService.getPatients();
+
+        // Filter by date range (simple string comparison for ISO dates works decent enough for fallback)
+        const filtered = allPatients.filter(p => {
+          const pDate = p.created_at.split('T')[0];
+          return pDate >= startDateStr && pDate <= endDateStr;
+        });
+
+        // Enrich
+        const enhanced = await Promise.all(filtered.map(async (p) => {
+          const txs = await localStorageService.getTransactionsByPatient(p.id);
+          const admissions = (await localStorageService.getActiveAdmissions()).filter(a => a.patient_id === p.id);
+          const totalSpent = txs.reduce((sum, t) => sum + t.amount, 0);
+
+          return {
+            ...p,
+            transactions: txs,
+            admissions: admissions,
+            totalSpent,
+            visitCount: 1,
+            lastVisit: p.created_at,
+            departmentStatus: admissions.length > 0 ? 'IPD' : 'OPD'
+          } as unknown as PatientWithRelations;
+        }));
+
+        return enhanced;
+      } catch (localError) {
+        console.error('❌ LocalStorage fallback failed:', localError);
+        return [];
+      }
     }
   }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, Search, X, Plus } from 'lucide-react';
+import { Printer, Search, X, Plus, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
 import HospitalService from '../../services/hospitalService';
 import { supabase, HOSPITAL_ID } from '../../config/supabaseNew';
@@ -7,6 +7,7 @@ import type { PatientWithRelations } from '../../config/supabaseNew';
 import { MEDICAL_SERVICES_DATA, searchServices, type MedicalService } from '../../data/medicalServices';
 import { logger } from '../../utils/logger';
 import BillingService, { type IPDBill } from '../../services/billingService';
+import { RGHS_PACKAGES_DATA, type RGHSPackage } from '../../data/rghsPackages';
 
 interface BillingRow {
   id: string;
@@ -218,6 +219,12 @@ const NewIPDBillingModule: React.FC = () => {
   const [customServiceName, setCustomServiceName] = useState('');
   const [customServiceAmount, setCustomServiceAmount] = useState('');
   const [availableServices, setAvailableServices] = useState<MedicalService[]>(MEDICAL_SERVICES_DATA);
+
+  // RGHS Package State
+  const [selectedPackage, setSelectedPackage] = useState<RGHSPackage | null>(null);
+  const [packageSearchTerm, setPackageSearchTerm] = useState('');
+  const [showPackageDropdown, setShowPackageDropdown] = useState(false);
+  const [rghsPackages, setRghsPackages] = useState<RGHSPackage[]>(RGHS_PACKAGES_DATA);
 
   // Stay Segment Management
   const [_staySegments, _setStaySegments] = useState([{
@@ -1198,7 +1205,7 @@ const NewIPDBillingModule: React.FC = () => {
 
       // Get all active admissions to map bed info
       const { data: activeAdmissions, error: admissionError } = await supabase
-        .from('admissions')
+        .from('patient_admissions')
         .select(`
           patient_id,
           bed_number,
@@ -1257,7 +1264,7 @@ const NewIPDBillingModule: React.FC = () => {
             room_type,
             ipd_number,
             assigned_doctor,
-            admissions (
+            admissions:patient_admissions (
               admission_date,
               discharge_date,
               ipd_number,
@@ -1822,11 +1829,20 @@ const NewIPDBillingModule: React.FC = () => {
   };
 
   // Patient search and selection functions
-  const filteredPatients = patients.filter(patient =>
-    `${patient.first_name} ${patient.last_name || ''}`.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-    patient.patient_id.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
-    patient.phone.includes(patientSearchTerm)
-  ).slice(0, 10);
+  const filteredPatients = [...patients]
+    .sort((a, b) => {
+      // Prioritize ADMITTED patients
+      const aAdmitted = a.ipd_status === 'ADMITTED';
+      const bAdmitted = b.ipd_status === 'ADMITTED';
+      if (aAdmitted && !bAdmitted) return -1;
+      if (!aAdmitted && bAdmitted) return 1;
+      return 0;
+    })
+    .filter(patient =>
+      `${patient.first_name} ${patient.last_name || ''}`.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
+      patient.patient_id.toLowerCase().includes(patientSearchTerm.toLowerCase()) ||
+      patient.phone.includes(patientSearchTerm)
+    ).slice(0, 10);
 
   const handlePatientSelect = (patient: PatientWithRelations) => {
     setSelectedPatient(patient);
@@ -2081,8 +2097,8 @@ const NewIPDBillingModule: React.FC = () => {
 
           actualServicesData.push({
             id: `service-${service.id || index}`,
-            serviceType: service.name, // Use actual service name as service type
-            particulars: service.name, // Service name as particulars
+            serviceType: service.name,
+            particulars: service.name,
             quantity: serviceQuantity,
             unitPrice: serviceUnitPrice,
             discount: 0,
@@ -2092,6 +2108,24 @@ const NewIPDBillingModule: React.FC = () => {
             doctor: '',
             date: formattedBillingDate
           });
+        });
+      }
+
+      // Add RGHS Package if selected
+      if (selectedPackage) {
+        actualServicesData.push({
+          id: `package-${selectedPackage.id}`,
+          serviceType: 'Package',
+          particulars: `${selectedPackage.code} - ${selectedPackage.name}`,
+          quantity: 1,
+          unitPrice: selectedPackage.rate,
+          discount: 0,
+          taxes: 0,
+          total: selectedPackage.rate,
+          emergency: 'No',
+          doctor: '',
+          date: formattedBillingDate,
+          description: selectedPackage.description
         });
       }
 
@@ -3994,7 +4028,94 @@ const NewIPDBillingModule: React.FC = () => {
                       ))}
                     </div>
 
-                    {/* IPD Services with Dropdown */}
+                    {/* RGHS Package Selection */}
+                    <div className="bg-white p-4 rounded-lg border-l-4 border-l-orange-500 shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <h5 className="font-medium text-gray-700 flex items-center">
+                          <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
+                          RGHS / Package Selection
+                        </h5>
+                      </div>
+
+                      {selectedPackage ? (
+                        <div className="bg-orange-50 p-4 rounded-lg border border-orange-200 relative">
+                          <button
+                            onClick={() => setSelectedPackage(null)}
+                            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-bold text-orange-800 text-lg">{selectedPackage.name}</div>
+                              <div className="text-sm text-orange-700 font-mono bg-orange-100 px-2 py-0.5 rounded inline-block mt-1">
+                                {selectedPackage.code}
+                              </div>
+                              <p className="text-sm text-orange-600 mt-2">{selectedPackage.description}</p>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xl font-bold text-orange-700">₹{selectedPackage.rate.toLocaleString()}</div>
+                              <div className="text-xs text-orange-500 mt-1">Package Rate</div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-orange-500">
+                            <div className="pl-3 py-2 bg-gray-50 border-r border-gray-300">
+                              <Search className="h-4 w-4 text-gray-500" />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Search for RGHS packages by name or code..."
+                              value={packageSearchTerm}
+                              onChange={(e) => {
+                                setPackageSearchTerm(e.target.value);
+                                setShowPackageDropdown(true);
+                              }}
+                              onFocus={() => setShowPackageDropdown(true)}
+                              className="flex-1 px-3 py-2 outline-none"
+                            />
+                          </div>
+
+                          {showPackageDropdown && packageSearchTerm && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                              {rghsPackages
+                                .filter(pkg =>
+                                  pkg.name.toLowerCase().includes(packageSearchTerm.toLowerCase()) ||
+                                  pkg.code.toLowerCase().includes(packageSearchTerm.toLowerCase())
+                                )
+                                .map(pkg => (
+                                  <div
+                                    key={pkg.id}
+                                    onClick={() => {
+                                      setSelectedPackage(pkg);
+                                      setPackageSearchTerm('');
+                                      setShowPackageDropdown(false);
+                                      // Optional: Set billing amount to package rate automatically?
+                                      // For now, allow manual adjustment or keep strict
+                                    }}
+                                    className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b last:border-b-0 border-gray-100"
+                                  >
+                                    <div className="flex justify-between items-center">
+                                      <div>
+                                        <div className="font-medium text-gray-800">{pkg.name}</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">{pkg.code} • {pkg.category}</div>
+                                      </div>
+                                      <div className="font-semibold text-orange-600">₹{pkg.rate.toLocaleString()}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+
+                          {/* Close dropdown on outside click would be handled by a global listener or overlay */}
+                          {showPackageDropdown && (
+                            <div className="fixed inset-0 z-0 bg-transparent" onClick={() => setShowPackageDropdown(false)}></div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     <div className="bg-white p-4 rounded-lg border-l-4 border-l-purple-500 shadow-sm">
                       <div className="flex items-center justify-between mb-4">
                         <h5 className="font-medium text-gray-700 flex items-center">
@@ -4226,13 +4347,29 @@ const NewIPDBillingModule: React.FC = () => {
                         </div>
                       </div>
 
+                      {/* Advance Payment Display */}
+                      <div className="mb-4 bg-green-50 p-3 rounded-md border border-green-200 flex justify-between items-center">
+                        <div className="flex items-center">
+                          <div className="p-2 bg-green-100 rounded-full mr-3">
+                            <DollarSign className="h-4 w-4 text-green-700" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-green-800">Advance / Deposits Paid</div>
+                            <div className="text-xs text-green-600">Total previously collected from patient</div>
+                          </div>
+                        </div>
+                        <div className="text-xl font-bold text-green-700">
+                          - ₹{advancePayments.toFixed(2)}
+                        </div>
+                      </div>
+
                       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
                         <div className="flex items-center justify-between">
                           <div>
-                            <div className="text-lg font-semibold text-blue-800">Net Payable Amount</div>
-                            <div className="text-sm text-blue-600">After discount and additional charges</div>
+                            <div className="text-lg font-semibold text-blue-800">Net Payable Balance</div>
+                            <div className="text-sm text-blue-600">Total - Discount + Tax - Advance</div>
                           </div>
-                          <div className="text-3xl font-bold text-blue-800">₹{((admissionFee || 0) + calculateTotalStayCharges() + calculateSelectedServicesTotal() - (discount || 0) + (tax || 0)).toFixed(2)}</div>
+                          <div className="text-3xl font-bold text-blue-800">₹{Math.max(0, (admissionFee || 0) + calculateTotalStayCharges() + calculateSelectedServicesTotal() - (discount || 0) + (tax || 0) - advancePayments).toFixed(2)}</div>
                         </div>
                       </div>
                     </div>

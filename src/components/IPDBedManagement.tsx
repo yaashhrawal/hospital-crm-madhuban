@@ -27,6 +27,7 @@ import BloodTransfusionMonitoringForm from './BloodTransfusionMonitoringForm';
 import DischargePatientModal from './DischargePatientModal';
 import PatientAdmissionForm from './PatientAdmissionForm';
 import IPDConsentsSection from './IPDConsentsSection';
+import IPDServiceSelection from './IPDServiceSelection';
 import BedService, { type BedData as DBBedData } from '../services/bedService';
 
 interface BedData extends DBBedData {
@@ -50,6 +51,11 @@ interface BedData extends DBBedData {
   physiotherapyNotesData?: any;
   bloodTransfusionData?: any;
   ipdConsentsData?: any;
+  tatStatus?: 'idle' | 'running' | 'completed' | 'expired';
+  tatRemainingSeconds?: number;
+  admissionId?: string;
+  roomType?: string;
+  dailyRate?: number;
 }
 
 interface PatientSelectionModalProps {
@@ -60,17 +66,19 @@ interface PatientSelectionModalProps {
   setCustomAdmissionDate: (date: string) => void;
   useCustomDate: boolean;
   setUseCustomDate: (use: boolean) => void;
+  pendingPatient?: PatientWithRelations | null;
 }
 
 
-const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({ 
-  isOpen, 
-  onClose, 
-  onSelectPatient, 
-  customAdmissionDate, 
-  setCustomAdmissionDate, 
-  useCustomDate, 
-  setUseCustomDate 
+const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
+  isOpen,
+  onClose,
+  onSelectPatient,
+  customAdmissionDate,
+  setCustomAdmissionDate,
+  useCustomDate,
+  setUseCustomDate,
+  pendingPatient
 }) => {
   const [patients, setPatients] = useState<PatientWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,9 +86,14 @@ const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      loadPatients();
+      if (pendingPatient) {
+        // Automatically select the pending patient
+        onSelectPatient(pendingPatient);
+      } else {
+        loadPatients();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, pendingPatient]);
 
   const loadPatients = async () => {
     try {
@@ -137,7 +150,7 @@ const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
           {/* Admission Date Selection */}
           <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h3 className="text-lg font-semibold text-blue-800 mb-4">📅 Admission Date</h3>
-            
+
             <div className="space-y-3">
               <div className="flex items-center">
                 <input
@@ -152,7 +165,7 @@ const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
                   Use Today's Date ({new Date().toLocaleDateString()})
                 </label>
               </div>
-              
+
               <div className="flex items-center">
                 <input
                   type="radio"
@@ -166,7 +179,7 @@ const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
                   Use Custom Date (Backdate)
                 </label>
               </div>
-              
+
               {useCustomDate && (
                 <div className="ml-7">
                   <input
@@ -233,25 +246,25 @@ const PatientSelectionModal: React.FC<PatientSelectionModalProps> = ({
 const getNextIPDNumber = (): string => {
   // Get current date in YYYYMMDD format
   const today = new Date();
-  const dateString = today.getFullYear().toString() + 
-                    (today.getMonth() + 1).toString().padStart(2, '0') + 
-                    today.getDate().toString().padStart(2, '0');
-  
+  const dateString = today.getFullYear().toString() +
+    (today.getMonth() + 1).toString().padStart(2, '0') +
+    today.getDate().toString().padStart(2, '0');
+
   // Get or initialize the IPD counter for today
   const counterKey = `ipd-counter-${dateString}`;
   const currentCounter = parseInt(localStorage.getItem(counterKey) || '0');
   const nextCounter = currentCounter + 1;
-  
+
   console.log(`🔢 IPD Counter Debug - Date: ${dateString}, Counter Key: ${counterKey}`);
   console.log(`🔢 Current Counter: ${currentCounter}, Next Counter: ${nextCounter}`);
-  
+
   // Save the updated counter
   localStorage.setItem(counterKey, nextCounter.toString());
   console.log(`💾 Saved counter to localStorage: ${nextCounter}`);
-  
+
   // Generate IPD number: IPD-YYYYMMDD-XXX (where XXX is sequential number)
   const ipdNumber = `IPD-${dateString}-${nextCounter.toString().padStart(3, '0')}`;
-  
+
   console.log(`🏥 Auto-generated IPD Number: ${ipdNumber} (Counter: ${nextCounter})`);
   return ipdNumber;
 };
@@ -259,19 +272,24 @@ const getNextIPDNumber = (): string => {
 // Function to get current IPD stats for today
 const getIPDStats = (): { date: string; count: number; lastIPD: string } => {
   const today = new Date();
-  const dateString = today.getFullYear().toString() + 
-                    (today.getMonth() + 1).toString().padStart(2, '0') + 
-                    today.getDate().toString().padStart(2, '0');
-  
+  const dateString = today.getFullYear().toString() +
+    (today.getMonth() + 1).toString().padStart(2, '0') +
+    today.getDate().toString().padStart(2, '0');
+
   const counterKey = `ipd-counter-${dateString}`;
   const count = parseInt(localStorage.getItem(counterKey) || '0');
   const lastIPD = count > 0 ? `IPD-${dateString}-${count.toString().padStart(3, '0')}` : 'None';
-  
-  
+
+
   return { date: dateString, count, lastIPD };
 };
 
-const IPDBedManagement: React.FC = () => {
+interface IPDBedManagementProps {
+  pendingPatient?: PatientWithRelations | null;
+  onClearPendingPatient?: () => void;
+}
+
+const IPDBedManagement: React.FC<IPDBedManagementProps> = ({ pendingPatient, onClearPendingPatient }) => {
   const [beds, setBeds] = useState<BedData[]>([]);
   const [filteredBeds, setFilteredBeds] = useState<BedData[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -297,75 +315,102 @@ const IPDBedManagement: React.FC = () => {
   const [showVitalCharts, setShowVitalCharts] = useState(false);
   const [showIntakeOutput, setShowIntakeOutput] = useState(false);
   const [showMedicationChart, setShowMedicationChart] = useState(false);
+
+  // Auto-admission logic for pending patients
+  useEffect(() => {
+    if (pendingPatient && beds.length > 0 && !showPatientSelection && !selectedBedForAdmission) {
+      console.log('🚀 Auto-admission triggered for:', pendingPatient.first_name);
+
+      // Find first vacant bed
+      const firstVacantBed = beds.find(b => b.status === 'vacant');
+      if (firstVacantBed) {
+        toast.success(`Automatically selecting Bed ${firstVacantBed.number} for ${pendingPatient.first_name}`);
+        handleAdmitClick(firstVacantBed.id);
+        // Clear immediately to prevent re-triggering if component re-renders
+        onClearPendingPatient?.();
+      } else {
+        toast.error('No vacant beds available for automatic admission');
+        onClearPendingPatient?.();
+      }
+    }
+  }, [pendingPatient, beds]);
+
+  // Clear pending patient after admission process starts or modal closes
+  useEffect(() => {
+    if (!showPatientSelection && pendingPatient && !selectedBedForAdmission) {
+      // If modal was closed without selecting or auto-trigger stopped, clear it
+      onClearPendingPatient?.();
+    }
+  }, [showPatientSelection, pendingPatient, selectedBedForAdmission]);
   const [showCarePlan, setShowCarePlan] = useState(false);
   const [showDiabeticChart, setShowDiabeticChart] = useState(false);
   const [showNursesNotes, setShowNursesNotes] = useState(false);
   const [showTatForm, setShowTatForm] = useState(false);
   const [selectedPatientForTat, setSelectedPatientForTat] = useState<PatientWithRelations | null>(null);
-  
+
   // Patient History State for each bed
   const [bedPatientHistory, setBedPatientHistory] = useState<Record<string, any[]>>({});
   const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
   const [showHistoryForBed, setShowHistoryForBed] = useState<string | null>(null);
   const [selectedBedForTat, setSelectedBedForTat] = useState<BedData | null>(null);
-  
+
   // PAC Record Form state
   const [showPACRecord, setShowPACRecord] = useState(false);
   const [selectedPatientForPAC, setSelectedPatientForPAC] = useState<PatientWithRelations | null>(null);
   const [selectedBedForPAC, setSelectedBedForPAC] = useState<BedData | null>(null);
-  
+
   // Pre-Operative Orders Form state
   const [showPreOpOrders, setShowPreOpOrders] = useState(false);
   const [selectedPatientForPreOpOrders, setSelectedPatientForPreOpOrders] = useState<PatientWithRelations | null>(null);
   const [selectedBedForPreOpOrders, setSelectedBedForPreOpOrders] = useState<BedData | null>(null);
-  
+
   // Pre-OP-Check List Form state
   const [showPreOpChecklist, setShowPreOpChecklist] = useState(false);
   const [selectedPatientForPreOpChecklist, setSelectedPatientForPreOpChecklist] = useState<PatientWithRelations | null>(null);
   const [selectedBedForPreOpChecklist, setSelectedBedForPreOpChecklist] = useState<BedData | null>(null);
-  
+
   // Surgical Safety Checklist Form state
   const [showSurgicalSafety, setShowSurgicalSafety] = useState(false);
   const [selectedPatientForSurgicalSafety, setSelectedPatientForSurgicalSafety] = useState<PatientWithRelations | null>(null);
   const [selectedBedForSurgicalSafety, setSelectedBedForSurgicalSafety] = useState<BedData | null>(null);
-  
+
   // Anaesthesia Notes Form state
   const [showAnaesthesiaNotes, setShowAnaesthesiaNotes] = useState(false);
   const [selectedPatientForAnaesthesiaNotes, setSelectedPatientForAnaesthesiaNotes] = useState<PatientWithRelations | null>(null);
   const [selectedBedForAnaesthesiaNotes, setSelectedBedForAnaesthesiaNotes] = useState<BedData | null>(null);
-  
+
   // Intra Operative Notes Form state
   const [showIntraOperativeNotes, setShowIntraOperativeNotes] = useState(false);
   const [selectedPatientForIntraOperativeNotes, setSelectedPatientForIntraOperativeNotes] = useState<PatientWithRelations | null>(null);
   const [selectedBedForIntraOperativeNotes, setSelectedBedForIntraOperativeNotes] = useState<BedData | null>(null);
-  
+
   // Post Operative Orders Form state
   const [showPostOperativeOrders, setShowPostOperativeOrders] = useState(false);
   const [selectedPatientForPostOperativeOrders, setSelectedPatientForPostOperativeOrders] = useState<PatientWithRelations | null>(null);
   const [selectedBedForPostOperativeOrders, setSelectedBedForPostOperativeOrders] = useState<BedData | null>(null);
-  
+
   // Physiotherapy Notes Form state
   const [showPhysiotherapyNotes, setShowPhysiotherapyNotes] = useState(false);
   const [selectedPatientForPhysiotherapyNotes, setSelectedPatientForPhysiotherapyNotes] = useState<PatientWithRelations | null>(null);
   const [selectedBedForPhysiotherapyNotes, setSelectedBedForPhysiotherapyNotes] = useState<BedData | null>(null);
-  
+
   // Blood Transfusion Monitoring Form state
   const [showBloodTransfusion, setShowBloodTransfusion] = useState(false);
   const [selectedPatientForBloodTransfusion, setSelectedPatientForBloodTransfusion] = useState<PatientWithRelations | null>(null);
   const [selectedBedForBloodTransfusion, setSelectedBedForBloodTransfusion] = useState<BedData | null>(null);
-  
+
   // Discharge Modal state
   const [showDischargeModal, setShowDischargeModal] = useState(false);
   const [selectedAdmissionForDischarge, setSelectedAdmissionForDischarge] = useState<PatientAdmissionWithRelations | null>(null);
-  
+
   // Patient Admission Form state
   const [showPatientAdmissionForm, setShowPatientAdmissionForm] = useState(false);
   const [selectedPatientForAdmissionForm, setSelectedPatientForAdmissionForm] = useState<PatientWithRelations | null>(null);
   const [selectedBedForAdmissionForm, setSelectedBedForAdmissionForm] = useState<BedData | null>(null);
-  
+
   // Surgical Record expansion state
   const [expandedSurgicalRecordBed, setExpandedSurgicalRecordBed] = useState<string | null>(null);
-  
+
   // IPD Consents state
   const [showIPDConsents, setShowIPDConsents] = useState(false);
   const [selectedPatientForConsents, setSelectedPatientForConsents] = useState<PatientWithRelations | null>(null);
@@ -379,7 +424,7 @@ const IPDBedManagement: React.FC = () => {
   const [selectedBedForRecords, setSelectedBedForRecords] = useState<BedData | null>(null);
   const [selectedPatientForRecords, setSelectedPatientForRecords] = useState<PatientWithRelations | null>(null);
   const [isPatientRecordsModalClosing, setIsPatientRecordsModalClosing] = useState(false);
-  
+
   // IPD Statistics state
   const [ipdStats, setIPDStats] = useState(() => getIPDStats());
   const [selectedPatientForNursing, setSelectedPatientForNursing] = useState<PatientWithRelations | null>(null);
@@ -389,16 +434,16 @@ const IPDBedManagement: React.FC = () => {
   // TAT timer management
   useEffect(() => {
     const interval = setInterval(() => {
-      setBeds(prevBeds => 
+      setBeds(prevBeds =>
         prevBeds.map(bed => {
           if (bed.status === 'occupied' && bed.tatStatus === 'running' && bed.tatStartTime) {
             const now = Date.now();
             const elapsed = Math.floor((now - bed.tatStartTime) / 1000);
             const remaining = Math.max(0, (30 * 60) - elapsed); // 30 minutes in seconds
-            
+
             if (remaining === 0 && bed.tatStatus === 'running') {
               // TAT expired
-              toast.error(`TAT expired for patient in Bed ${bed.number}!`, {
+              toast.error(`TAT expired for patient in Bed ${bed.bed_number}!`, {
                 duration: 5000,
                 style: { background: '#FEE2E2', color: '#DC2626' }
               });
@@ -408,7 +453,7 @@ const IPDBedManagement: React.FC = () => {
                 tatRemainingSeconds: 0
               };
             }
-            
+
             return {
               ...bed,
               tatRemainingSeconds: remaining
@@ -444,18 +489,18 @@ const IPDBedManagement: React.FC = () => {
   useEffect(() => {
     filterBeds();
   }, [beds, searchTerm, filterStatus]);
-  
+
   // Reset history when beds change (but don't auto-load)
   useEffect(() => {
     // Only close history if the currently shown bed is no longer occupied
     const occupiedBedIds = beds.filter(bed => bed.status === 'occupied').map(bed => bed.id);
-    
+
     // Close history only if the currently open history bed is no longer occupied
     if (showHistoryForBed && !occupiedBedIds.includes(showHistoryForBed)) {
       console.log('📖 Closing history for bed that is no longer occupied:', showHistoryForBed);
       setShowHistoryForBed(null);
     }
-    
+
     // Clear history for beds that are no longer occupied
     setBedPatientHistory(prev => {
       const filtered: Record<string, any[]> = {};
@@ -473,17 +518,17 @@ const IPDBedManagement: React.FC = () => {
       const dbBeds = await BedService.getAllBeds();
       console.log('🔍 TOTAL BEDS IN DATABASE:', dbBeds.length);
       console.log('🔍 BED NUMBERS:', dbBeds.map(bed => bed.bed_number).sort());
-      
+
       const bedNumbers = dbBeds.map(bed => parseInt(bed.bed_number)).filter(num => !isNaN(num));
       const duplicates = bedNumbers.filter((num, index) => bedNumbers.indexOf(num) !== index);
-      
+
       if (duplicates.length > 0) {
         console.log('🚨 DUPLICATE BED NUMBERS FOUND:', duplicates);
         alert(`Found ${duplicates.length} duplicate beds in DATABASE: ${duplicates.join(', ')}\n\nThe issue is in your main Supabase database, not local!`);
       } else {
         alert(`Database contains ${dbBeds.length} beds. No duplicates found locally.`);
       }
-      
+
     } catch (error) {
       console.error('❌ Debug failed:', error);
     }
@@ -493,7 +538,7 @@ const IPDBedManagement: React.FC = () => {
   const clearLocalStateAndReload = async () => {
     try {
       console.log('🧹 Clearing local state and forcing fresh reload...');
-      
+
       // Clear any localStorage remnants
       Object.keys(localStorage).forEach(key => {
         if (key.includes('bed') || key.includes('ipd') || key.includes('hospital')) {
@@ -501,14 +546,14 @@ const IPDBedManagement: React.FC = () => {
           localStorage.removeItem(key);
         }
       });
-      
+
       // Clear current state
       setBeds([]);
       setFilteredBeds([]);
-      
+
       // Force reload from database
       await loadBedsFromDatabase();
-      
+
     } catch (error) {
       console.error('❌ Error clearing local state:', error);
       toast.error('Failed to clear local state');
@@ -519,17 +564,17 @@ const IPDBedManagement: React.FC = () => {
   const loadBedsFromDatabase = async () => {
     try {
       console.log('🏥 Loading beds from MAIN database (not local)...');
-      
+
       // Get all beds with patient information directly from main database
       console.log('🔍 Fetching beds from database...');
       const dbBeds = await BedService.getAllBeds();
       console.log('📋 Raw beds data from database:', dbBeds);
       console.log('📊 Loaded beds from database:', dbBeds?.length || 0, 'beds');
-      
+
       // Transform database beds to match component interface
       const transformedBeds: BedData[] = dbBeds.map(dbBed => {
         console.log(`🔍 Bed ${dbBed.bed_number} - Status: ${dbBed.status}, Patient: ${dbBed.patient_id ? 'Yes' : 'No'}, IPD: ${dbBed.ipd_number || 'None'}`);
-        
+
         // Determine actual status based on both status field and patient presence
         let actualStatus: 'occupied' | 'vacant' = 'vacant';
         if (dbBed.status === 'OCCUPIED' || dbBed.status === 'occupied') {
@@ -541,41 +586,41 @@ const IPDBedManagement: React.FC = () => {
           dbBed.patients = null;
           dbBed.patient_id = null;
         }
-        
+
         return {
           ...dbBed,
-          number: parseInt(dbBed.bed_number),
+          number: parseInt(dbBed.bed_number.replace(/\D/g, '')) || 0,
           status: actualStatus,
           patient: actualStatus === 'occupied' ? (dbBed.patients as PatientWithRelations) : undefined,
           admissionDate: actualStatus === 'occupied' ? dbBed.admission_date : undefined,
           ipdNumber: actualStatus === 'occupied' ? dbBed.ipd_number : undefined,
-        tatStartTime: dbBed.tat_start_time,
-        tatStatus: dbBed.tat_status || 'idle',
-        tatRemainingSeconds: dbBed.tat_remaining_seconds || 1800,
-        consentFormData: dbBed.consent_form_data,
-        consentFormSubmitted: dbBed.consent_form_submitted || false,
-        clinicalRecordData: dbBed.clinical_record_data,
-        clinicalRecordSubmitted: dbBed.clinical_record_submitted || false,
-        progressSheetData: dbBed.progress_sheet_data,
-        progressSheetSubmitted: dbBed.progress_sheet_submitted || false,
-        nursesOrdersData: dbBed.nurses_orders_data,
-        nursesOrdersSubmitted: dbBed.nurses_orders_submitted || false,
-        ipdConsentsData: dbBed.ipd_consents_data,
-        physiotherapyNotesSubmitted: false, // Default values for missing fields
-        bloodTransfusionSubmitted: false
+          tatStartTime: dbBed.tat_start_time,
+          tatStatus: dbBed.tat_status || 'idle',
+          tatRemainingSeconds: dbBed.tat_remaining_seconds || 1800,
+          consentFormData: dbBed.consent_form_data,
+          consentFormSubmitted: dbBed.consent_form_submitted || false,
+          clinicalRecordData: dbBed.clinical_record_data,
+          clinicalRecordSubmitted: dbBed.clinical_record_submitted || false,
+          progressSheetData: dbBed.progress_sheet_data,
+          progressSheetSubmitted: dbBed.progress_sheet_submitted || false,
+          nursesOrdersData: dbBed.nurses_orders_data,
+          nursesOrdersSubmitted: dbBed.nurses_orders_submitted || false,
+          ipdConsentsData: dbBed.ipd_consents_data,
+          physiotherapyNotesSubmitted: false, // Default values for missing fields
+          bloodTransfusionSubmitted: false
         };
       });
-      
+
       // Sort beds numerically by bed number
       const sortedBeds = transformedBeds.sort((a, b) => a.number - b.number);
-      
+
       setBeds(sortedBeds);
       console.log('✅ Beds loaded and transformed successfully, total beds:', sortedBeds.length);
-      
+
       // Update stats
       const stats = await BedService.getIPDStats();
       setIPDStats(stats);
-      
+
     } catch (error) {
       console.error('❌ Error loading beds from database:', error);
       console.error('❌ Error details:', {
@@ -592,21 +637,21 @@ const IPDBedManagement: React.FC = () => {
   const initializeBeds = async () => {
     await loadBedsFromDatabase();
   };
-  
+
   // Load patient history for a specific bed/patient
   const loadPatientHistoryForBed = async (bed: BedData) => {
     if (!bed.patient || !bed.patient.id) return;
-    
+
     const bedKey = bed.id;
     setHistoryLoading(prev => ({ ...prev, [bedKey]: true }));
-    
+
     try {
       console.log(`📊 Loading IPD history for bed ${bed.bed_number}, patient:`, bed.patient.patient_id);
-      
+
       // Get patient's admission date to filter transactions
       const admissionDate = bed.patient.admissions?.[0]?.admission_date || bed.admissionDate;
       console.log('📅 Patient admission date:', admissionDate);
-      
+
       // Load all transactions for this patient since admission
       const { data: transactions, error } = await supabase
         .from('patient_transactions')
@@ -623,16 +668,16 @@ const IPDBedManagement: React.FC = () => {
         .gte('transaction_date', admissionDate || '1970-01-01')
         .order('transaction_date', { ascending: false })
         .limit(50);
-        
+
       if (error) {
         console.error('❌ Error loading patient history:', error);
         setBedPatientHistory(prev => ({ ...prev, [bedKey]: [] }));
         return;
       }
-      
+
       console.log(`✅ Loaded ${transactions?.length || 0} transactions for bed ${bed.bed_number}`);
       setBedPatientHistory(prev => ({ ...prev, [bedKey]: transactions || [] }));
-      
+
     } catch (error: any) {
       console.error('❌ Error loading patient history for bed:', error);
       setBedPatientHistory(prev => ({ ...prev, [bedKey]: [] }));
@@ -640,22 +685,22 @@ const IPDBedManagement: React.FC = () => {
       setHistoryLoading(prev => ({ ...prev, [bedKey]: false }));
     }
   };
-  
+
   // Handle history button click
   const handleHistoryClick = async (bed: BedData, event: React.MouseEvent) => {
     // Prevent event from bubbling up to the parent bed card
     event.stopPropagation();
-    
+
     console.log('🔍 History button clicked for bed:', bed.id, 'bed number:', bed.bed_number);
     console.log('🔍 Current showHistoryForBed:', showHistoryForBed);
     console.log('🔍 Is currently loading:', historyLoading[bed.id]);
-    
+
     // Prevent action if already loading
     if (historyLoading[bed.id]) {
       console.log('📖 History is loading, ignoring click');
       return;
     }
-    
+
     if (showHistoryForBed === bed.id) {
       // Close if already open
       console.log('📖 Closing history for bed:', bed.id);
@@ -664,7 +709,7 @@ const IPDBedManagement: React.FC = () => {
       console.log('📖 Opening history for bed:', bed.id);
       // First show the history section immediately
       setShowHistoryForBed(bed.id);
-      
+
       // Then load history if not already loaded
       if (!bedPatientHistory[bed.id] || bedPatientHistory[bed.id].length === 0) {
         console.log('📖 Loading history for bed:', bed.id);
@@ -689,12 +734,12 @@ const IPDBedManagement: React.FC = () => {
       filtered = filtered.filter(bed => {
         // Only search in patient data if bed is actually occupied
         if (bed.status === 'occupied' && bed.patient) {
-          return `bed ${bed.number}`.toLowerCase().includes(search) ||
+          return `bed ${bed.bed_number}`.toLowerCase().includes(search) ||
             bed.patient.first_name?.toLowerCase().includes(search) ||
             bed.patient.last_name?.toLowerCase().includes(search) ||
             bed.patient.patient_id?.toLowerCase().includes(search);
         } else {
-          return `bed ${bed.number}`.toLowerCase().includes(search);
+          return `bed ${bed.bed_number}`.toLowerCase().includes(search);
         }
       });
     }
@@ -725,7 +770,7 @@ const IPDBedManagement: React.FC = () => {
   // NEW: Handle smooth closing animation for patient records modal
   const handleClosePatientRecordsModal = () => {
     setIsPatientRecordsModalClosing(true);
-    
+
     // Wait for animation to complete before actually closing
     setTimeout(() => {
       setShowPatientRecordsModal(false);
@@ -738,7 +783,7 @@ const IPDBedManagement: React.FC = () => {
   // NEW: Handle smooth closing animation for admission consent form
   const handleCloseAdmissionConsentForm = () => {
     setIsAdmissionConsentFormClosing(true);
-    
+
     // Wait for animation to complete before actually closing
     setTimeout(() => {
       setShowAdmissionConsentForm(false);
@@ -763,31 +808,39 @@ const IPDBedManagement: React.FC = () => {
       // Update bed status and patient information
       await BedService.admitPatientToBed(
         selectedBedForAdmissionConsent.id,
-        patientData.id,
-        admissionData.admissionDate
+        patientData,
+        {
+          admission_date: admissionData.admissionDate,
+          admission_type: 'Planned', // Default since this seems to be a consent-first flow
+          attendant_name: '',
+          attendant_relation: '',
+          attendant_phone: '',
+          insurance_provider: '',
+          policy_number: ''
+        }
       );
 
       // Update local state
-      setBeds(prevBeds => 
-        prevBeds.map(bed => 
+      setBeds(prevBeds =>
+        prevBeds.map(bed =>
           bed.id === selectedBedForAdmissionConsent.id
             ? {
-                ...bed,
-                status: 'occupied',
-                patient: patientData,
-                admissionDate: new Date().toISOString().split('T')[0],
-                consentFormData: consentData
-              }
+              ...bed,
+              status: 'occupied',
+              patient: patientData,
+              admissionDate: new Date().toISOString().split('T')[0],
+              consentFormData: consentData
+            }
             : bed
         )
       );
 
       toast.success(`Patient ${patientData.first_name} ${patientData.last_name} admitted successfully to Bed ${selectedBedForAdmissionConsent.number}`);
-      
+
       // Close the consent form
       setShowAdmissionConsentForm(false);
       setSelectedBedForAdmissionConsent(null);
-      
+
     } catch (error) {
       console.error('Error during admission:', error);
       toast.error('Failed to admit patient');
@@ -801,7 +854,7 @@ const IPDBedManagement: React.FC = () => {
       setSelectedPatientForRecords(bed.patient);
       setIsPatientRecordsModalClosing(true); // Start in closed state
       setShowPatientRecordsModal(true);
-      
+
       // Immediately trigger opening animation
       setTimeout(() => {
         setIsPatientRecordsModalClosing(false);
@@ -812,117 +865,87 @@ const IPDBedManagement: React.FC = () => {
   const handlePatientSelection = async (patient: PatientWithRelations) => {
     if (!selectedBedForAdmission) return;
 
-    // Debug logging
-    console.log('🔍 Admission validation:');
-    console.log('- useCustomDate:', useCustomDate);
-    console.log('- customAdmissionDate:', customAdmissionDate);
-    console.log('- selectedBedForAdmission:', selectedBedForAdmission);
-
-    // Validate custom date if selected
-    if (useCustomDate && (!customAdmissionDate || !customAdmissionDate.trim())) {
-      console.error('❌ Custom date validation failed');
-      toast.error('Please select a custom admission date or use today\'s date');
-      return;
-    }
-
     // Get the bed for admission
     const selectedBed = beds.find(b => b.id === selectedBedForAdmission);
     if (!selectedBed) return;
 
-    // Use custom date if provided, otherwise use current date (declare outside try block)
-    let admissionDateToUse;
-    if (useCustomDate && customAdmissionDate && customAdmissionDate.trim()) {
-      try {
-        // Parse the date and set to start of day in local timezone
-        const customDate = new Date(customAdmissionDate + 'T00:00:00');
-        admissionDateToUse = customDate.toISOString();
-      } catch (error) {
-        console.error('❌ Invalid custom date format:', customAdmissionDate, error);
-        toast.error('Invalid date format. Using today\'s date instead.');
-        admissionDateToUse = new Date().toISOString();
-      }
-    } else {
-      admissionDateToUse = new Date().toISOString();
+    // Open admission form instead of immediate admission
+    setSelectedPatientForAdmissionForm(patient);
+    setSelectedBedForAdmissionForm(selectedBed);
+
+    // Set admission date from custom date if provided
+    if (useCustomDate && customAdmissionDate) {
+      // Pass this somehow? For now, we rely on the form defaults or handle it in submit
+      // Actually, the form has its own date field. We can pre-fill it if we pass it as prop or just let user pick in form.
+      // The form defaults to today.
     }
 
+    setShowPatientSelection(false);
+    setShowPatientAdmissionForm(true);
+  };
+
+  const handleFinalAdmissionSubmit = async (formData: any) => {
+    if (!selectedBedForAdmissionForm || !selectedPatientForAdmissionForm) return;
+
     try {
-      
-      console.log('📅 Using admission date:', admissionDateToUse);
-      
-      // Use BedService to admit patient (this handles IPD generation and database updates)
-      const updatedBed = await BedService.admitPatientToBed(selectedBed.id, patient, admissionDateToUse);
-      
+      console.log('📝 Submitting admission with data:', formData);
+
+      // Construct AdmissionData object
+      const admissionData = {
+        admission_type: formData.typeOfAdmission,
+        attendant_name: formData.attendantName,
+        attendant_relation: formData.attendantRelation,
+        attendant_phone: formData.attendantPhone,
+        insurance_provider: formData.insuranceProvider,
+        policy_number: formData.policyNumber,
+        advance_amount: formData.amount ? parseFloat(formData.amount) : 0, // Capture advance payment
+        admission_date: formData.depositDate || new Date().toISOString(), // Use deposit date as admission date
+        treating_doctor: formData.drSign || null, // Best guess mapping or add specific field
+        history_present_illness: '' // Add if form has it
+      };
+
+      // Call BedService
+      const updatedBed = await BedService.admitPatientToBed(
+        selectedBedForAdmissionForm.id,
+        selectedPatientForAdmissionForm,
+        admissionData
+      );
+
       console.log('✅ Patient admitted successfully via BedService');
-      console.log('💾 Updated bed with IPD:', updatedBed.ipd_number);
-      
-      console.log('💾 Updated bed from BedService:', updatedBed);
-      console.log('💾 IPD Number in updated bed:', updatedBed.ipd_number);
-      
-      // Refresh beds from database to get latest state
+
+      // Update local state
       await loadBedsFromDatabase();
-      
-      // Update patient's IPD status (if columns exist)
+
+      // Update patient status text if needed
       try {
-        await HospitalService.updatePatient(patient.id, {
+        await HospitalService.updatePatient(selectedPatientForAdmissionForm.id, {
           ipd_status: 'ADMITTED',
-          ipd_bed_number: selectedBed.number.toString()
+          ipd_bed_number: selectedBedForAdmissionForm.number.toString()
         });
-      } catch (updateError) {
-        console.warn('⚠️ Patient IPD status update failed (columns may not exist):', updateError);
-        // Continue with admission even if IPD status update fails
+      } catch (e) {
+        console.warn('Could not update patient status', e);
       }
 
-      toast.success(`Patient ${patient.first_name} ${patient.last_name} admitted to bed ${selectedBed.number}`);
-      
-      // Close patient selection and immediately show IPD consent form
-      setShowPatientSelection(false);
-      
-      // Use the updated bed data directly from BedService (has the correct IPD number)
-      const bedForConsents = {
-        ...selectedBed,
+      toast.success('Patient admitted successfully');
+      setShowPatientAdmissionForm(false);
+
+      // Open Consent Form next
+      setSelectedPatientForIPDConsent(selectedPatientForAdmissionForm);
+      setSelectedBedForIPDConsent({
+        ...selectedBedForAdmissionForm,
         ipdNumber: updatedBed.ipd_number,
-        ipd_number: updatedBed.ipd_number,
-        patient: updatedBed.patients as PatientWithRelations,
-        status: 'occupied' as const,
-        admissionDate: updatedBed.admission_date
-      };
-      
-      console.log('🏥 Bed data for IPD consents:', bedForConsents);
-      console.log('🏥 IPD Number being passed to consent forms:', bedForConsents.ipdNumber);
-      
-      setSelectedPatientForIPDConsent(patient);
-      setSelectedBedForIPDConsent(bedForConsents);
-      setShowIPDConsentForm(true);
-      
-      setSelectedBedForAdmission(null);
-    } catch (error: any) {
-      console.error('❌ Failed to admit patient:');
-      console.log(error); // Use console.log to expand the full error
-      console.error('❌ Error message:', error?.message);
-      console.error('❌ Error code:', error?.code);
-      console.error('❌ Error details:', error?.details);
-      console.error('❌ Full error JSON:', JSON.stringify(error, null, 2));
-      
-      // Show detailed error message
-      let errorMessage = 'Failed to admit patient. ';
-      
-      if (error?.message) {
-        errorMessage += error.message;
-      } else if (error?.code === '23502') {
-        errorMessage += 'Missing required field in database.';
-      } else {
-        errorMessage += 'Please check console for details.';
-      }
-      
-      toast.error(errorMessage);
-      
-      // Also log the context data
-      console.error('❌ Context data:');
-      console.log({
-        patient: patient,
-        selectedBedForAdmission: selectedBedForAdmission,
-        admissionDateToUse: admissionDateToUse
+        status: 'occupied',
+        patient: selectedPatientForAdmissionForm
       });
+      setShowIPDConsentForm(true);
+
+      // Clean up
+      setSelectedPatientForAdmissionForm(null);
+      setSelectedBedForAdmissionForm(null);
+
+    } catch (error: any) {
+      console.error('❌ Admission failed:', error);
+      toast.error('Failed to admit patient: ' + (error.message || 'Unknown error'));
     }
   };
 
@@ -971,7 +994,7 @@ const IPDBedManagement: React.FC = () => {
     setShowIPDConsentForm(false);
     setSelectedPatientForIPDConsent(null);
     setSelectedBedForIPDConsent(null);
-    
+
     toast.success('IPD Consent form submitted and saved successfully');
   };
 
@@ -1219,7 +1242,7 @@ const IPDBedManagement: React.FC = () => {
       const latestBed = beds.find(b => b.id === bed.id) || bed;
       console.log('Opening IPD consents for bed:', latestBed);
       console.log('Bed has consent data:', latestBed.ipdConsentsData);
-      
+
       setSelectedPatientForConsents(bed.patient);
       setSelectedBedForConsents(latestBed);
       setShowIPDConsents(true);
@@ -1434,7 +1457,7 @@ const IPDBedManagement: React.FC = () => {
     setShowClinicalRecordForm(false);
     setSelectedPatientForClinicalRecord(null);
     setSelectedBedForClinicalRecord(null);
-    
+
     toast.success('Initial RMO Assessment submitted and saved successfully');
   };
 
@@ -1459,14 +1482,14 @@ const IPDBedManagement: React.FC = () => {
     setShowProgressSheet(false);
     setSelectedPatientForProgressSheet(null);
     setSelectedBedForProgressSheet(null);
-    
+
     toast.success('Doctor\'s Progress Sheet submitted and saved successfully');
   };
 
   // Individual Nursing Form Submit Handlers
   const handleVitalChartsSubmit = (vitalChartsData: any) => {
     if (!selectedBedForNursing) return;
-    
+
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === selectedBedForNursing.id) {
@@ -1487,7 +1510,7 @@ const IPDBedManagement: React.FC = () => {
 
   const handleIntakeOutputSubmit = (intakeOutputData: any) => {
     if (!selectedBedForNursing) return;
-    
+
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === selectedBedForNursing.id) {
@@ -1508,7 +1531,7 @@ const IPDBedManagement: React.FC = () => {
 
   const handleMedicationChartSubmit = (medicationData: any) => {
     if (!selectedBedForNursing) return;
-    
+
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === selectedBedForNursing.id) {
@@ -1529,7 +1552,7 @@ const IPDBedManagement: React.FC = () => {
 
   const handleCarePlanSubmit = (carePlanData: any) => {
     if (!selectedBedForNursing) return;
-    
+
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === selectedBedForNursing.id) {
@@ -1550,7 +1573,7 @@ const IPDBedManagement: React.FC = () => {
 
   const handleDiabeticChartSubmit = (diabeticData: any) => {
     if (!selectedBedForNursing) return;
-    
+
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === selectedBedForNursing.id) {
@@ -1571,7 +1594,7 @@ const IPDBedManagement: React.FC = () => {
 
   const handleNursesNotesSubmit = (nursesNotesData: any) => {
     if (!selectedBedForNursing) return;
-    
+
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === selectedBedForNursing.id) {
@@ -1602,7 +1625,7 @@ const IPDBedManagement: React.FC = () => {
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === bedId && bed.status === 'occupied') {
-          toast.success(`TAT started for Bed ${bed.number} - 30 minutes timer activated`);
+          toast.success(`TAT started for Bed ${bed.bed_number} - 30 minutes timer activated`);
           return {
             ...bed,
             tatStatus: 'running' as const,
@@ -1619,7 +1642,7 @@ const IPDBedManagement: React.FC = () => {
     setBeds(prevBeds =>
       prevBeds.map(bed => {
         if (bed.id === bedId) {
-          toast.success(`TAT completed for Bed ${bed.number}`);
+          toast.success(`TAT completed for Bed ${bed.bed_number}`);
           return {
             ...bed,
             tatStatus: 'completed' as const,
@@ -1684,13 +1707,20 @@ const IPDBedManagement: React.FC = () => {
       patient_id: bed.patient.id,
       bed_id: bedId,
       admission_date: bed.admissionDate || new Date().toISOString(),
-      status: 'ADMITTED' as const,
+      status: 'ACTIVE' as const,
       hospital_id: HOSPITAL_ID,
       ipd_number: bed.ipdNumber, // ✅ FIX: Include IPD number in discharge admission object
       patient: bed.patient,
+      services: [],
+      total_amount: 0,
+      amount_paid: 0,
+      balance: 0,
+      admitted_by: 'System',
       bed: {
         id: bedId,
-        bed_number: bed.number.toString(),
+        bed_number: bed.bed_number,
+        room_type: bed.room_type as any,
+        daily_rate: typeof bed.dailyRate === 'number' ? bed.dailyRate : (bed.daily_rate || 0),
         status: 'OCCUPIED' as const,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -1706,13 +1736,13 @@ const IPDBedManagement: React.FC = () => {
 
   const handleDischargeSuccess = async () => {
     console.log('🚪 handleDischargeSuccess called');
-    
+
     // Refresh the beds data after successful discharge
     const bedId = selectedAdmissionForDischarge?.bed_id;
     const patientId = selectedAdmissionForDischarge?.patient_id;
-    
+
     console.log('📋 Discharge details:', { bedId, patientId });
-    
+
     try {
       // Ensure bed is properly cleared using BedService
       if (bedId) {
@@ -1724,7 +1754,7 @@ const IPDBedManagement: React.FC = () => {
       console.warn('⚠️ BedService discharge failed, bed might already be cleared:', bedError);
       // Continue with the process even if bed service fails
     }
-    
+
     // Update patient's IPD status to DISCHARGED in database
     if (patientId) {
       try {
@@ -1737,23 +1767,23 @@ const IPDBedManagement: React.FC = () => {
         console.warn('⚠️ Patient IPD status update failed after discharge:', updateError);
       }
     }
-    
+
     // Close the modal first
     setShowDischargeModal(false);
     setSelectedAdmissionForDischarge(null);
-    
+
     // Clear the current beds state to force a complete refresh
     console.log('🔄 Clearing beds state before reload...');
     setBeds([]);
     setFilteredBeds([]);
-    
+
     // Add a small delay to ensure state is cleared
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Reload beds from database to get the updated status
     console.log('📥 Reloading beds from database...');
     await loadBedsFromDatabase();
-    
+
     console.log('✅ Discharge process completed and beds reloaded');
     toast.success('Patient discharged successfully and bed is now available');
   };
@@ -1764,27 +1794,27 @@ const IPDBedManagement: React.FC = () => {
       // Get all patients with IPD status = ADMITTED (using high limit to get all)
       const admittedPatients = await HospitalService.getPatients(50000, true, true);
       const ipdPatients = admittedPatients.filter(p => p.ipd_status === 'ADMITTED');
-      
+
       // Get all patients actually in beds
       const occupiedBeds = beds.filter(bed => bed.status === 'occupied' && bed.patient);
       const bedsPatientIds = occupiedBeds.map(bed => bed.patient?.id).filter(Boolean);
-      
+
       // Find patients marked as IPD but not in any bed
       const orphanedPatients = ipdPatients.filter(patient => !bedsPatientIds.includes(patient.id));
-      
+
       if (orphanedPatients.length > 0) {
         console.log(`🔄 Found ${orphanedPatients.length} patients marked as IPD but not in beds, fixing...`);
-        
+
         // Update their status to DISCHARGED
-        const updatePromises = orphanedPatients.map(patient => 
+        const updatePromises = orphanedPatients.map(patient =>
           HospitalService.updatePatient(patient.id, {
             ipd_status: 'DISCHARGED',
             ipd_bed_number: null
           })
         );
-        
+
         await Promise.all(updatePromises);
-        
+
         toast.success(`Fixed ${orphanedPatients.length} patients with inconsistent IPD status`);
         console.log('✅ IPD status sync completed');
       } else {
@@ -1801,32 +1831,32 @@ const IPDBedManagement: React.FC = () => {
     try {
       // Get all patients with any IPD status
       const allPatients = await HospitalService.getPatients(50000, true, true);
-      const ipdPatients = allPatients.filter(p => 
-        p.ipd_status === 'ADMITTED' || 
-        p.ipd_status === 'DISCHARGED' || 
+      const ipdPatients = allPatients.filter(p =>
+        p.ipd_status === 'ADMITTED' ||
+        p.ipd_status === 'DISCHARGED' ||
         p.ipd_bed_number
       );
-      
+
       if (ipdPatients.length === 0) {
         toast('No IPD entries found in database', { icon: 'ℹ️' });
         return;
       }
 
       console.log(`🗑️ Clearing IPD entries for ${ipdPatients.length} patients...`);
-      
+
       // Clear IPD status and bed number for all patients
-      const updatePromises = ipdPatients.map(patient => 
+      const updatePromises = ipdPatients.map(patient =>
         HospitalService.updatePatient(patient.id, {
           ipd_status: null,
           ipd_bed_number: null
         })
       );
-      
+
       await Promise.all(updatePromises);
-      
+
       toast.success(`Cleared IPD entries for ${ipdPatients.length} patients`);
       console.log('✅ All IPD entries cleared from database');
-      
+
     } catch (error) {
       console.error('❌ Failed to clear IPD entries:', error);
       toast.error('Failed to clear IPD entries from database');
@@ -1895,31 +1925,28 @@ const IPDBedManagement: React.FC = () => {
           <div className="flex rounded-lg overflow-hidden">
             <button
               onClick={() => setFilterStatus('all')}
-              className={`px-6 py-3 text-sm font-medium transition-colors ${
-                filterStatus === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+              className={`px-6 py-3 text-sm font-medium transition-colors ${filterStatus === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
             >
               All
             </button>
             <button
               onClick={() => setFilterStatus('occupied')}
-              className={`px-6 py-3 text-sm font-medium border-l transition-colors ${
-                filterStatus === 'occupied'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+              className={`px-6 py-3 text-sm font-medium border-l transition-colors ${filterStatus === 'occupied'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
             >
               Occupied
             </button>
             <button
               onClick={() => setFilterStatus('vacant')}
-              className={`px-6 py-3 text-sm font-medium border-l transition-colors ${
-                filterStatus === 'vacant'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+              className={`px-6 py-3 text-sm font-medium border-l transition-colors ${filterStatus === 'vacant'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
             >
               Vacant
             </button>
@@ -1972,7 +1999,7 @@ const IPDBedManagement: React.FC = () => {
             <AlertCircle className="w-8 h-8 text-gray-400" />
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
+            <div
               className="bg-green-500 h-2 rounded-full transition-all duration-300"
               style={{ width: `${statistics.occupancyRate}%` }}
             ></div>
@@ -1985,17 +2012,16 @@ const IPDBedManagement: React.FC = () => {
         {filteredBeds.map((bed) => (
           <div
             key={bed.id}
-            className={`rounded-lg shadow-sm border p-4 transition-all duration-300 ease-in-out ${
-              bed.status === 'occupied'
-                ? 'bg-green-100 border-green-200 cursor-pointer hover:bg-green-200 hover:shadow-lg hover:scale-105 transform hover:border-green-300'
-                : 'bg-white border-gray-200 hover:shadow-md hover:border-gray-300'
-            }`}
+            className={`rounded-lg shadow-sm border p-4 transition-all duration-300 ease-in-out ${bed.status === 'occupied'
+              ? 'bg-green-100 border-green-200 cursor-pointer hover:bg-green-200 hover:shadow-lg hover:scale-105 transform hover:border-green-300'
+              : 'bg-white border-gray-200 hover:shadow-md hover:border-gray-300'
+              }`}
             onClick={() => bed.status === 'occupied' ? handleBedCardClick(bed) : undefined}
             title={bed.status === 'occupied' ? 'Click to view patient records' : ''}
           >
             {/* Bed Number */}
             <div className="text-sm font-medium text-gray-700 mb-3">
-              Bed {bed.number}
+              Bed {bed.bed_number}
             </div>
 
             {/* Icon and Status */}
@@ -2005,9 +2031,8 @@ const IPDBedManagement: React.FC = () => {
               ) : (
                 <Bed className="w-12 h-12 text-gray-400 mb-2" />
               )}
-              <span className={`text-sm font-medium ${
-                bed.status === 'occupied' ? 'text-green-700' : 'text-gray-600'
-              }`}>
+              <span className={`text-sm font-medium ${bed.status === 'occupied' ? 'text-green-700' : 'text-gray-600'
+                }`}>
                 {bed.status === 'occupied' ? 'Occupied' : 'Vacant'}
               </span>
               {bed.patient && (
@@ -2044,15 +2069,14 @@ const IPDBedManagement: React.FC = () => {
                             {historyLoading[bed.id] && (
                               <div className="animate-spin w-3 h-3 border-2 border-blue-600 border-t-transparent rounded-full"></div>
                             )}
-                            <span className={`transform transition-transform duration-200 text-blue-600 ${
-                              showHistoryForBed === bed.id ? 'rotate-180' : ''
-                            }`}>
+                            <span className={`transform transition-transform duration-200 text-blue-600 ${showHistoryForBed === bed.id ? 'rotate-180' : ''
+                              }`}>
                               ▼
                             </span>
                           </div>
                         </div>
                       </button>
-                      
+
                       {/* Collapsible History Content */}
                       {showHistoryForBed === bed.id && (
                         <div className="mt-2 bg-white rounded-lg border border-gray-200 shadow-sm animate-fade-in">
@@ -2063,7 +2087,7 @@ const IPDBedManagement: React.FC = () => {
                                 Since: {bed.admissionDate ? new Date(bed.admissionDate).toLocaleDateString() : 'N/A'}
                               </div>
                             </div>
-                            
+
                             {historyLoading[bed.id] ? (
                               <div className="flex items-center justify-center py-6 text-sm text-gray-500">
                                 <div className="animate-spin w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full mr-2"></div>
@@ -2090,8 +2114,8 @@ const IPDBedManagement: React.FC = () => {
                                           </td>
                                           <td className="px-2 py-2">
                                             <div className="font-medium text-gray-800 truncate max-w-32" title={transaction.description}>
-                                              {transaction.description?.length > 30 
-                                                ? transaction.description.substring(0, 30) + '...' 
+                                              {transaction.description?.length > 30
+                                                ? transaction.description.substring(0, 30) + '...'
                                                 : transaction.description || 'Service'}
                                             </div>
                                             {transaction.transaction_reference && (
@@ -2099,34 +2123,32 @@ const IPDBedManagement: React.FC = () => {
                                             )}
                                           </td>
                                           <td className="px-2 py-2 text-center">
-                                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                              transaction.transaction_type === 'SERVICE' && transaction.description?.includes('[IPD_BILL]') 
-                                                ? 'bg-purple-100 text-purple-700' 
-                                                : transaction.transaction_type === 'SERVICE' 
+                                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${transaction.transaction_type === 'SERVICE' && transaction.description?.includes('[IPD_BILL]')
+                                              ? 'bg-purple-100 text-purple-700'
+                                              : transaction.transaction_type === 'SERVICE'
                                                 ? 'bg-blue-100 text-blue-700'
-                                                : transaction.transaction_type === 'ADMISSION_FEE' 
-                                                ? 'bg-green-100 text-green-700'
-                                                : 'bg-gray-100 text-gray-700'
-                                            }`}>
+                                                : transaction.transaction_type === 'ADMISSION_FEE'
+                                                  ? 'bg-green-100 text-green-700'
+                                                  : 'bg-gray-100 text-gray-700'
+                                              }`}>
                                               {transaction.transaction_type === 'SERVICE' && transaction.description?.includes('[IPD_BILL]') ? 'Bill' :
-                                               transaction.transaction_type === 'SERVICE' ? 'Service' :
-                                               transaction.transaction_type === 'ADMISSION_FEE' ? 'Deposit' :
-                                               transaction.transaction_type}
+                                                transaction.transaction_type === 'SERVICE' ? 'Service' :
+                                                  transaction.transaction_type === 'ADMISSION_FEE' ? 'Deposit' :
+                                                    transaction.transaction_type}
                                             </span>
                                           </td>
                                           <td className="px-2 py-2 text-right font-semibold text-gray-900">
                                             ₹{transaction.amount?.toLocaleString() || '0'}
                                           </td>
                                           <td className="px-2 py-2 text-center">
-                                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                                              transaction.status === 'COMPLETED' 
-                                                ? 'bg-blue-100 text-blue-700' 
-                                                : transaction.status === 'PAID' 
-                                                ? 'bg-green-100 text-green-700' 
+                                            <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${transaction.status === 'COMPLETED'
+                                              ? 'bg-blue-100 text-blue-700'
+                                              : transaction.status === 'PAID'
+                                                ? 'bg-green-100 text-green-700'
                                                 : transaction.status === 'PENDING'
-                                                ? 'bg-yellow-100 text-yellow-700'
-                                                : 'bg-red-100 text-red-700'
-                                            }`}>
+                                                  ? 'bg-yellow-100 text-yellow-700'
+                                                  : 'bg-red-100 text-red-700'
+                                              }`}>
                                               {transaction.status || 'N/A'}
                                             </span>
                                           </td>
@@ -2135,7 +2157,7 @@ const IPDBedManagement: React.FC = () => {
                                     </tbody>
                                   </table>
                                 </div>
-                                
+
                                 {/* Summary Footer */}
                                 <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
                                   <div className="bg-blue-50 text-blue-700 px-2 py-2 rounded text-center">
@@ -2176,11 +2198,10 @@ const IPDBedManagement: React.FC = () => {
             {/* Action Button */}
             <button
               onClick={() => bed.status === 'occupied' ? handleDischarge(bed.id) : handleAdmitClick(bed.id)}
-              className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out transform hover:scale-105 active:scale-95 flex items-center justify-center space-x-1 ${
-                bed.status === 'occupied'
-                  ? 'bg-red-500 text-white hover:bg-red-600 hover:shadow-lg'
-                  : 'bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg'
-              }`}
+              className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 ease-in-out transform hover:scale-105 active:scale-95 flex items-center justify-center space-x-1 ${bed.status === 'occupied'
+                ? 'bg-red-500 text-white hover:bg-red-600 hover:shadow-lg'
+                : 'bg-blue-500 text-white hover:bg-blue-600 hover:shadow-lg'
+                }`}
             >
               {bed.status === 'occupied' ? (
                 <>
@@ -2217,27 +2238,25 @@ const IPDBedManagement: React.FC = () => {
           isOpen={showAdmissionConsentForm}
           onClose={handleCloseAdmissionConsentForm}
           onSubmit={handleAdmissionConsentSubmit}
+          patient={pendingPatient as any}
           bedNumber={selectedBedForAdmissionConsent.number}
-          showPatientSelection={true}
         />
       )}
 
       {/* NEW: Patient Records Modal */}
       {showPatientRecordsModal && selectedBedForRecords && selectedPatientForRecords && (
-        <div 
-          className={`fixed inset-0 bg-black flex items-center justify-center z-50 p-4 transition-all duration-300 ease-out ${
-            isPatientRecordsModalClosing 
-              ? 'bg-opacity-0' 
-              : 'bg-opacity-50'
-          }`}
+        <div
+          className={`fixed inset-0 bg-black flex items-center justify-center z-50 p-4 transition-all duration-300 ease-out ${isPatientRecordsModalClosing
+            ? 'bg-opacity-0'
+            : 'bg-opacity-50'
+            }`}
           onClick={handleClosePatientRecordsModal}
         >
-          <div 
-            className={`bg-white rounded-lg shadow-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out transform ${
-              isPatientRecordsModalClosing 
-                ? 'scale-95 opacity-0' 
-                : 'scale-100 opacity-100'
-            }`}
+          <div
+            className={`bg-white rounded-lg shadow-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto transition-all duration-300 ease-out transform ${isPatientRecordsModalClosing
+              ? 'scale-95 opacity-0'
+              : 'scale-100 opacity-100'
+              }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 bg-white border-b p-4 flex justify-between items-center">
@@ -2394,6 +2413,16 @@ const IPDBedManagement: React.FC = () => {
                 </button>
               </div>
 
+              {/* Billing & Services Section */}
+              <div className="bg-emerald-50 rounded-lg p-0 border border-emerald-200 overflow-hidden">
+                <IPDServiceSelection
+                  patientId={selectedPatientForRecords.id}
+                  patientName={`${selectedPatientForRecords.first_name} ${selectedPatientForRecords.last_name}`}
+                  bedNumber={selectedBedForRecords.number}
+                  ipdNumber={selectedBedForRecords.ipdNumber}
+                />
+              </div>
+
               {/* Discharge Section */}
               <div className="bg-red-50 rounded-lg p-4 border border-red-200">
                 <h3 className="text-lg font-semibold text-red-800 mb-4">🚪 Discharge</h3>
@@ -2411,18 +2440,21 @@ const IPDBedManagement: React.FC = () => {
 
       {/* Existing Modals */}
       {/* Patient Selection Modal */}
-      <PatientSelectionModal
-        isOpen={showPatientSelection}
-        onClose={() => {
-          setShowPatientSelection(false);
-          setSelectedBedForAdmission(null);
-        }}
-        onSelectPatient={handlePatientSelection}
-        customAdmissionDate={customAdmissionDate}
-        setCustomAdmissionDate={setCustomAdmissionDate}
-        useCustomDate={useCustomDate}
-        setUseCustomDate={setUseCustomDate}
-      />
+      {showPatientSelection && (
+        <PatientSelectionModal
+          isOpen={showPatientSelection}
+          onClose={() => {
+            setShowPatientSelection(false);
+            setSelectedBedForAdmission(null);
+          }}
+          onSelectPatient={handlePatientSelection}
+          customAdmissionDate={customAdmissionDate}
+          setCustomAdmissionDate={setCustomAdmissionDate}
+          useCustomDate={useCustomDate}
+          setUseCustomDate={setUseCustomDate}
+          pendingPatient={pendingPatient}
+        />
+      )}
 
       {/* IPD Consent Form Modal */}
       {showIPDConsentForm && selectedPatientForIPDConsent && (
@@ -2451,14 +2483,14 @@ const IPDBedManagement: React.FC = () => {
             setSelectedBedForClinicalRecord(null);
           }}
           patient={selectedPatientForClinicalRecord}
-          bedNumber={selectedBedForClinicalRecord.number.toString()}
+          bedNumber={selectedBedForClinicalRecord.number}
           ipdNumber={selectedBedForClinicalRecord.ipdNumber || ''}
           savedData={selectedBedForClinicalRecord.clinicalRecordData}
           onSubmit={(data: any) => {
             console.log('Clinical record form data:', data);
-            setBeds(prevBeds => 
-              prevBeds.map(b => 
-                b.id === selectedBedForClinicalRecord.id 
+            setBeds(prevBeds =>
+              prevBeds.map(b =>
+                b.id === selectedBedForClinicalRecord.id
                   ? { ...b, clinicalRecordData: data, clinicalRecordSubmitted: true }
                   : b
               )
@@ -2622,17 +2654,16 @@ const IPDBedManagement: React.FC = () => {
       {/* TAT Form Modal */}
       {showTatForm && selectedPatientForTat && selectedBedForTat && (
         <TatForm
-          isOpen={showTatForm}
           onClose={() => {
             setShowTatForm(false);
             setSelectedPatientForTat(null);
             setSelectedBedForTat(null);
           }}
           patient={selectedPatientForTat}
-          bedNumber={selectedBedForTat.number}
-          ipdNumber={selectedBedForTat?.ipdNumber}
+          bedNumber={selectedBedForTat.number.toString()}
+          patientId={selectedPatientForTat.patient_id}
           savedData={selectedBedForTat?.tatFormData}
-          onSubmit={handleTatFormSubmit}
+          onSave={handleTatFormSubmit}
         />
       )}
 
@@ -2645,8 +2676,11 @@ const IPDBedManagement: React.FC = () => {
             setSelectedPatientForPAC(null);
             setSelectedBedForPAC(null);
           }}
-          patient={selectedPatientForPAC}
-          bedNumber={selectedBedForPAC.number}
+          patient={{
+            ...selectedPatientForPAC,
+            age: parseInt(selectedPatientForPAC.age || '0')
+          } as any}
+          bedNumber={selectedBedForPAC.number.toString()}
           ipdNumber={selectedBedForPAC?.ipdNumber}
           savedData={selectedBedForPAC?.pacRecordData}
           onSubmit={handlePACRecordSubmit}
@@ -2663,7 +2697,7 @@ const IPDBedManagement: React.FC = () => {
             setSelectedBedForPreOpOrders(null);
           }}
           patient={selectedPatientForPreOpOrders}
-          bedNumber={selectedBedForPreOpOrders.number}
+          bedNumber={selectedBedForPreOpOrders.number.toString()}
           ipdNumber={selectedBedForPreOpOrders?.ipdNumber}
           savedData={selectedBedForPreOpOrders?.preOpOrdersData}
           onSubmit={handlePreOpOrdersSubmit}
@@ -2679,8 +2713,11 @@ const IPDBedManagement: React.FC = () => {
             setSelectedPatientForPreOpChecklist(null);
             setSelectedBedForPreOpChecklist(null);
           }}
-          patient={selectedPatientForPreOpChecklist}
-          bedNumber={selectedBedForPreOpChecklist.number}
+          patient={{
+            ...selectedPatientForPreOpChecklist,
+            age: selectedPatientForPreOpChecklist.age || ''
+          } as any}
+          bedNumber={selectedBedForPreOpChecklist.number.toString()}
           ipdNumber={selectedBedForPreOpChecklist?.ipdNumber}
           savedData={selectedBedForPreOpChecklist?.preOpChecklistData}
           onSubmit={handlePreOpChecklistSubmit}
@@ -2696,11 +2733,16 @@ const IPDBedManagement: React.FC = () => {
             setSelectedPatientForSurgicalSafety(null);
             setSelectedBedForSurgicalSafety(null);
           }}
-          patient={selectedPatientForSurgicalSafety}
-          bedNumber={selectedBedForSurgicalSafety.number}
-          ipdNumber={selectedBedForSurgicalSafety?.ipdNumber}
+          patientData={{
+            name: `${selectedPatientForSurgicalSafety.first_name} ${selectedPatientForSurgicalSafety.last_name}`,
+            age: selectedPatientForSurgicalSafety.age || '',
+            gender: selectedPatientForSurgicalSafety.gender,
+            ipdNo: selectedBedForSurgicalSafety.ipdNumber || '',
+            patientId: selectedPatientForSurgicalSafety.patient_id,
+            doctorName: selectedPatientForSurgicalSafety.assigned_doctor
+          }}
           savedData={selectedBedForSurgicalSafety?.surgicalSafetyData}
-          onSubmit={handleSurgicalSafetySubmit}
+          onSave={handleSurgicalSafetySubmit}
         />
       )}
 
@@ -2714,7 +2756,7 @@ const IPDBedManagement: React.FC = () => {
             setSelectedBedForAnaesthesiaNotes(null);
           }}
           patient={selectedPatientForAnaesthesiaNotes}
-          bedNumber={selectedBedForAnaesthesiaNotes.number}
+          bedNumber={selectedBedForAnaesthesiaNotes.number.toString()}
           ipdNumber={selectedBedForAnaesthesiaNotes?.ipdNumber}
           savedData={selectedBedForAnaesthesiaNotes?.anaesthesiaNotesData}
           onSubmit={handleAnaesthesiaNotesSubmit}
@@ -2731,7 +2773,7 @@ const IPDBedManagement: React.FC = () => {
             setSelectedBedForIntraOperativeNotes(null);
           }}
           patient={selectedPatientForIntraOperativeNotes}
-          bedNumber={selectedBedForIntraOperativeNotes.number}
+          bedNumber={selectedBedForIntraOperativeNotes.number.toString()}
           ipdNumber={selectedBedForIntraOperativeNotes?.ipdNumber}
           savedData={selectedBedForIntraOperativeNotes?.intraOperativeNotesData}
           onSubmit={handleIntraOperativeNotesSubmit}
@@ -2748,7 +2790,7 @@ const IPDBedManagement: React.FC = () => {
             setSelectedBedForPostOperativeOrders(null);
           }}
           patient={selectedPatientForPostOperativeOrders}
-          bedNumber={selectedBedForPostOperativeOrders.number}
+          bedNumber={selectedBedForPostOperativeOrders.number.toString()}
           ipdNumber={selectedBedForPostOperativeOrders?.ipdNumber}
           savedData={selectedBedForPostOperativeOrders?.postOperativeOrdersData}
           onSubmit={handlePostOperativeOrdersSubmit}
@@ -2765,9 +2807,8 @@ const IPDBedManagement: React.FC = () => {
             setSelectedBedForPhysiotherapyNotes(null);
           }}
           patient={selectedPatientForPhysiotherapyNotes}
-          bedNumber={selectedBedForPhysiotherapyNotes.number}
-          ipdNumber={selectedBedForPhysiotherapyNotes?.ipdNumber}
-          savedData={selectedBedForPhysiotherapyNotes?.physiotherapyNotesData}
+          bedNumber={selectedBedForPhysiotherapyNotes.number.toString()}
+          initialData={selectedBedForPhysiotherapyNotes?.physiotherapyNotesData}
           onSubmit={handlePhysiotherapyNotesSubmit}
         />
       )}
@@ -2784,7 +2825,7 @@ const IPDBedManagement: React.FC = () => {
           patient={selectedPatientForBloodTransfusion}
           bedNumber={selectedBedForBloodTransfusion.number}
           ipdNumber={selectedBedForBloodTransfusion?.ipdNumber}
-          savedData={selectedBedForBloodTransfusion?.bloodTransfusionData}
+          initialData={selectedBedForBloodTransfusion?.bloodTransfusionData}
           onSubmit={handleBloodTransfusionSubmit}
         />
       )}
@@ -2798,16 +2839,13 @@ const IPDBedManagement: React.FC = () => {
             setSelectedPatientForAdmissionForm(null);
             setSelectedBedForAdmissionForm(null);
           }}
-          patient={selectedPatientForAdmissionForm}
+          patient={{
+            ...selectedPatientForAdmissionForm,
+            age: parseInt(selectedPatientForAdmissionForm.age || '0')
+          }}
           bedNumber={selectedBedForAdmissionForm.number}
           ipdNumber={selectedBedForAdmissionForm?.ipdNumber}
-          onSubmit={(data) => {
-            console.log('Patient admission form data:', data);
-            setShowPatientAdmissionForm(false);
-            setSelectedPatientForAdmissionForm(null);
-            setSelectedBedForAdmissionForm(null);
-            toast.success('Patient admission form saved successfully');
-          }}
+          onSubmit={handleFinalAdmissionSubmit}
         />
       )}
 

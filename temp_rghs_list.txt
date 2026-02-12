@@ -1,0 +1,140 @@
+GENERAL / SKIN PROCEDURES
+Consultation OPD – 135 – 135 – 135 – 135
+Consultation for Inpatients – 270 – 270 – 270 – 270
+Dressings of wounds – 58 – 58 – 45 – 45
+Suturing of wounds with local anesthesia – 112 – 112 – 97 – 97
+Aspiration Pleural Effusion (Diagnostic) – 138 – 138 – 120 – 120
+Aspiration Pleural Effusion (Therapeutic) – 200 – 200 – 174 – 174
+Abdominal Aspiration (Diagnostic) – 358 – 358 – 311 – 311
+Abdominal Aspiration (Therapeutic) – 476 – 476 – 414 – 414
+Pericardial Aspiration – 393 – 393 – 342 – 342
+Joint Aspiration – 328 – 328 – 285 – 285
+Skin Biopsy – 238 – 238 – 207 – 207
+Removal of stitches – 37 – 37 – 32 – 32
+Venesection – 129 – 129 – 112 – 112
+Phimosis under LA – 1357 – 1357 – 1180 – 1180
+Sternal puncture – 179 – 179 – 156 – 156
+Injection for haemorrhoids – 429 – 429 – 373 – 373
+Injection for varicose veins – 362 – 362 – 315 – 315
+Catheterisation – 500 – 500 – 425 – 425
+Dilatation of urethra – 518 – 518 – 450 – 450
+Incision and drainage – 449 – 449 – 390 – 390
+Intercostal drainage – 130 – 130 – 113 – 113
+Peritoneal dialysis – 1517 – 1517 – 1319 – 1319
+Excision of moles – 358 – 358 – 311 – 311
+Excision of warts – 321 – 321 – 279 – 279
+Excision of molluscum contagiosum – 135 – 135 – 117 – 117
+Excision of venereal warts – 166 – 166 – 144 – 144
+Excision of corns – 145 – 145 – 126 – 126
+Intralesional injection for keloid – 100 – 100 – 87 – 87
+Chemical cautery – 114 – 114 – 99 – 99
+OPHTHALMOLOGY PROCEDURES
+Subconjunctival / subtenon injection (one eye) – 71 – 71 – 62 – 62
+Subconjunctival / subtenon injection (both eyes) – 143 – 143 – 124 – 124
+Pterygium surgery – 6325 – 6325 – 5500 – 5500
+Conjunctival peritomy – 60 – 60 – 52 – 52
+Conjunctival wound repair – 3795 – 3795 – 3300 – 3300
+Removal of corneal foreign body – 120 – 120 – 104 – 104
+Corneal ulcer cauterization (one eye) – 71 – 71 – 62 – 62
+Corneal ulcer cauterization (both eyes) – 143 – 143 – 124 – 124
+Penetrating keratoplasty – 5951 – 5951 – 5175 – 5175
+Lamellar keratoplasty – 5750 – 5750 – 5000 – 5000
+Cyanoacrylate / fibrin glue application – 714 – 714 – 621 – 621
+Bandage contact lens for perforation – 476 – 476 – 414 – 414
+Scleral graft / conjunctival flap – 2381 – 2381 – 2070 – 2070
+Keratoconus correction with lenses – 1380 – 1380 – 1200 – 1200
+DENTAL PROCEDURES
+Extraction per tooth under LA – 92 – 92 – 80 – 80
+Complicated extraction under LA – 115 – 115 – 100 – 100
+Impacted tooth extraction under LA – 184 – 184 – 160 – 160
+Extraction under short GA (special patients) – 972 – 972 – 845 – 845
+Cyst/tumour excision up to 4 cm under LA – 281 – 281 – 244 – 244
+Cyst/tumour excision above 4 cm – 467 – 467 – 406 – 406
+Cyst/tumour excision under GA – 1150 – 1150 – 1000 – 1000
+TM joint ankylosis under GA – 7763 – 7763 – 6750 – 6750
+Intraoral soft tissue biopsy – 388 – 388 – 337 – 337
+Intraoral bone biopsy – 430 – 430 – 374 – 374
+Hemimandibulectomy with graft – 21735 – 21735 – 18900 – 18900
+Hemimandibulectomy without graft – 21735 – 21735 – 18900 – 18900
+ENT PROCEDURES
+Pure tone audiogram – 178 – 178 – 155 – 155
+Impedance audiometry – 238 – 238 – 207 – 207
+SISI / Tone decay – 137 – 137 – 119 – 119
+Hearing assessment – 120 – 120 – 104 – 104
+Speech discrimination score – 93 – 93 – 81 – 81
+Speech assessment – 124 – 124 – 108 – 108
+Speech therapy session – 136 – 136 – 118 – 118
+Cold caloric test – 178 – 178 – 155 – 155
+Removal of foreign body from nose – 358 – 358 – 311 – 311
+Removal of foreign body from ear – 238 – 238 – 207 – 207
+Ear syringing – 171 – 171 – 149 – 149
+Polyp removal under LA – 596 – 596 – 518 – 518
+Polyp removal under GA – 880 – 880 – 765 – 765
+GENERAL SURGERY / GI / ABDOMEN
+Haemorrhoidectomy – 24375 – 24375 – 20720 – 20720
+Stapled haemorrhoidectomy – 43700 – 43700 – 38000 – 38000
+Keloid excision – 1265 – 1265 – 1100 – 1100
+Varicose vein surgery – 11500 – 11500 – 10000 – 10000
+ICU / CARDIAC / VASCULAR
+Coronary care with monitoring – 863 – 863 – 750 – 750
+Oxygen / compressed air per hour – 58 – 58 – 50 – 50
+Ventilator charges per day – 604 – 604 – 525 – 525
+ASD closure – 59579 – 59579 – 51808 – 51808
+VSD closure – 59579 – 59579 – 51808 – 51808
+CABG surgery – 131523 – 131523 – 114368 – 114368
+Heart transplant – 285660 – 285660 – 248400 – 248400
+OBSTETRICS & GYNAECOLOGY
+Normal delivery – 8280 – 8280 – 7200 – 7200
+Vacuum delivery – 8927 – 8927 – 7763 – 7763
+Forceps delivery – 9522 – 9522 – 8280 – 8280
+Cesarean section – 15180 – 15180 – 13200 – 13200
+Abdominal hysterectomy – 17854 – 17854 – 15525 – 15525
+NDVH – 17854 – 17854 – 15525 – 15525
+Total laparoscopic hysterectomy – 26565 – 26565 – 23100 – 23100
+MTP 1st trimester – 3450 – 3450 – 3000 – 3000
+MTP 2nd trimester – 5026 – 5026 – 4370 – 4370
+Operations for Vesicoureteric Reflux (VUR) / Urinary incontinence with bulking agents – 21505 – 21505 – 18700 – 18700
+Ureterostomy – Cutaneous – 13800 – 13800 – 12000 – 12000
+Uretero-colic anastomosis – 16560 – 16560 – 14400 – 14400
+Formation of an Ileal Conduit – 17854 – 17854 – 15525 – 15525
+Ureteric catheterisation – 10950 – 10950 – 8278 – 8278
+Biopsy of bladder (cystoscopic) – 2530 – 2530 – 2200 – 2200
+Cysto-litholapaxy – 11308 – 11308 – 9833 – 9833
+Operations for injuries of the bladder – 11500 – 11500 – 10000 – 10000
+Suprapubic drainage (cystostomy / vesicostomy) – 6210 – 6210 – 5400 – 5400
+Simple cystectomy – 17854 – 17854 – 15525 – 15525
+Diverticulectomy – open – 16560 – 16560 – 14400 – 14400
+Diverticulectomy – laparoscopic / endoscopic – 19044 – 19044 – 16560 – 16560
+Diverticulectomy – endoscopic incision of neck – 1898 – 1898 – 1650 – 1650
+Augmentation cystoplasty – 7337 – 7337 – 6380 – 6380
+Exstrophy of bladder – single stage repair – 23081 – 23081 – 20070 – 20070
+Exstrophy of bladder – multistage repair – 22897 – 22897 – 19910 – 19910
+Exstrophy of bladder – simple cystectomy with urinary diversion – 25300 – 25300 – 22000 – 22000
+Repair of ureterocoele – open – 14283 – 14283 – 12420 – 12420
+Repair of ureterocoele – laparoscopic / endoscopic – 15813 – 15813 – 13750 – 13750
+Repair of ureterocoele – endoscopic incision – 13455 – 13455 – 11700 – 11700
+Open suprapubic prostatectomy – 21425 – 21425 – 18630 – 18630
+Open retropubic prostatectomy – 20830 – 20830 – 18113 – 18113
+Transurethral resection of prostate (TURP) – 19282 – 19282 – 16767 – 16767
+Urethroscopy / cystopanendoscopy – 4761 – 4761 – 4140 – 4140
+Internal urethrotomy – optical – 6325 – 6325 – 5500 – 5500
+Internal urethrotomy – core through urethroplasty – 11426 – 11426 – 9936 – 9936
+Urethral reconstruction – end-to-end anastomosis – 3795 – 3795 – 3300 – 3300
+Substitution urethroplasty (trans-pubic urethroplasty) – 21505 – 21505 – 18700 – 18700
+Abdomino-perineal urethroplasty – 16100 – 16100 – 14000 – 14000
+Posterior urethral valve fulguration – 11664 – 11664 – 10143 – 10143
+Male urinary incontinence – open surgery – 17854 – 17854 – 15525 – 15525
+Male urinary incontinence – sling – 19044 – 19044 – 16560 – 16560
+Male urinary incontinence – bulking agent – 21379 – 21379 – 18590 – 18590
+Female urinary incontinence – open surgery – 17854 – 17854 – 15525 – 15525
+Female urinary incontinence – sling – 19044 – 19044 – 16560 – 16560
+Female urinary incontinence – bulking agent – 21379 – 21379 – 18590 – 18590
+Reduction of paraphimosis – 1898 – 1898 – 1650 – 1650
+Circumcision – 3105 – 3105 – 2700 – 2700
+Meatotomy – 2428 – 2428 – 2111 – 2111
+Meatoplasty – 3333 – 3333 – 2898 – 2898
+Hypospadias with chordee correction – 9522 – 9522 – 8280 – 8280
+Hypospadias – second stage – 17204 – 17204 – 14960 – 14960
+Hypospadias – single stage repair – 10580 – 10580 – 9200 – 9200
+Crippled hypospadias repair – 12650 – 12650 – 11000 – 11000
+Epispadias – primary repair – 13852 – 13852 – 12045 – 12045

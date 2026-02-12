@@ -94,15 +94,19 @@ const BillingSection: React.FC = () => {
           (transaction.status !== 'DELETED' && transaction.status !== 'CANCELLED')
         );
 
-        if (hasIPDTransactions) {
-          logger.log('✅ Found patient with IPD billing:', patient.first_name || patient.name, {
+        // Also check if patient is currently admitted (should be in billing even without transactions)
+        const isAdmitted = patient.ipd_status === 'ADMITTED';
+
+        if (hasIPDTransactions || isAdmitted) {
+          logger.log('✅ Found patient with IPD billing/status:', patient.first_name || patient.name, {
             id: patient.id,
             patient_id: patient.patient_id,
+            isAdmitted,
             ipdTransactions: transactions.filter(t => ['SERVICE', 'ADMISSION_FEE', 'DEPOSIT', 'ADVANCE_PAYMENT'].includes(t.transaction_type)).length
           });
         }
 
-        return hasIPDTransactions;
+        return hasIPDTransactions || isAdmitted;
       });
 
       logger.log('🔍 Patients with IPD billing history found:', patientsWithIPDBillingHistory.length);
@@ -156,8 +160,8 @@ const BillingSection: React.FC = () => {
           willShow: (patientDeposits > 0 || patientIPDBills > 0)
         });
 
-        // Add patient to billing list (only if they actually have deposits or IPD bills)
-        if (patientDeposits > 0 || patientIPDBills > 0) {
+        // Add patient to billing list (only if they actually have deposits or IPD bills OR are admitted)
+        if (patientDeposits > 0 || patientIPDBills > 0 || patient.ipd_status === 'ADMITTED') {
           patientBillingsList.push({
             patientId: patient.id || patient.patient_id,
             patientName: patient.first_name ? `${patient.first_name} ${patient.last_name || ''}`.trim() : (patient.name || 'Unknown'),
@@ -485,8 +489,8 @@ const BillingSection: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center space-x-2 ${activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
             >
               <tab.icon className="h-4 w-4" />

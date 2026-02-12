@@ -1407,10 +1407,11 @@ const PatientHistoryModal: React.FC<PatientHistoryModalProps> = ({ patient, isOp
 
 interface ComprehensivePatientListProps {
   onNavigate?: (tab: string) => void;
+  onShiftToIPD?: (patient: PatientWithRelations) => void;
 }
 
 import DoctorService from '../services/doctorService';
-const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onNavigate }) => {
+const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onNavigate, onShiftToIPD }) => {
   const { hasPermission } = usePermissions();
   const { user } = useAuth();
   const [patients, setPatients] = useState<PatientWithRelations[]>([]);
@@ -1861,8 +1862,14 @@ const ComprehensivePatientList: React.FC<ComprehensivePatientListProps> = ({ onN
       return;
     }
 
-    // Navigate to IPD Beds tab
-    if (onNavigate) {
+    // Navigate to IPD Beds tab and pass patient
+    if (onShiftToIPD) {
+      onShiftToIPD(patient);
+      toast(`Shifting ${patient.first_name} to IPD Beds - Please select an available bed`, {
+        icon: '🛏️',
+        duration: 4000
+      });
+    } else if (onNavigate) {
       onNavigate('ipd-beds');
       toast(`Opening IPD Beds - Please select an available bed and admit ${patient.first_name} ${patient.last_name}`, {
         icon: '🛏️',

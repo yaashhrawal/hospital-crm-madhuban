@@ -8,7 +8,7 @@ interface IPDConsentFormProps {
   patient: PatientWithRelations;
   bedNumber: number;
   ipdNumber?: string;
-  onSubmit: (consentData: any) => void;
+  onSubmit: (consentData: any, patient: PatientWithRelations) => void;
   savedData?: any; // Previously saved form data
 }
 
@@ -17,25 +17,25 @@ interface ConsentFormData {
   patientName: string;
   patientId: string;
   ipdNo: string;
-  
+
   // Consent Point 1 fields
   consentName1: string;
   patientAddress: string;
   admissionDate: string;
   admissionTime: string;
-  
+
   // Patient Signature
   patientSignatureName: string;
   patientSignature: string;
   patientSignatureDate: string;
   patientSignatureTime: string;
-  
+
   // Employee Signature
   employeeName: string;
   employeeSignature: string;
   employeeSignatureDate: string;
   employeeSignatureTime: string;
-  
+
   // Unable to consent (if applicable)
   unableReason: string;
   relativeName: string;
@@ -137,11 +137,11 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
 }) => {
   // Debug logging for IPD number
   console.log(`📄 IPDConsentForm - IPD Number received: ${ipdNumber}`);
-  
+
   // Language selection state
   const [selectedLanguage, setSelectedLanguage] = useState<'english' | 'hindi'>('english');
   const t = translations[selectedLanguage];
-  
+
   const [formData, setFormData] = useState<ConsentFormData>({
     patientName: '',
     patientId: '',
@@ -180,52 +180,52 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
   // Function to get current time in 12-hour format
   const getCurrentTime12Hour = (): string => {
     const now = new Date();
-    return now.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
+    return now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: true 
+      hour12: true
     });
   };
 
   // Auto-populate form with patient data and current date/time
   useEffect(() => {
-    console.log('🔍 IPDConsentForm Debug:', { 
-      isOpen, 
-      patient: patient ? { 
-        first_name: patient.first_name, 
-        last_name: patient.last_name, 
-        patient_id: patient.patient_id 
-      } : null, 
-      ipdNumber, 
-      bedNumber 
+    console.log('🔍 IPDConsentForm Debug:', {
+      isOpen,
+      patient: patient ? {
+        first_name: patient.first_name,
+        last_name: patient.last_name,
+        patient_id: patient.patient_id
+      } : null,
+      ipdNumber,
+      bedNumber
     });
-    
+
     if (isOpen && patient) {
       console.log('📝 Setting form data with patient:', patient);
       console.log('🔍 Patient admissions data:', patient.admissions);
-      
+
       // Get admission date and time from patient data, fallback to current if not available
       const admissionData = patient.admissions?.[0]; // Get the latest admission
       console.log('🔍 Latest admission data:', admissionData);
       let admissionDate: string;
       let admissionTime: string;
-      
+
       if (admissionData?.admission_date) {
         console.log('🔍 Raw admission_date from database:', admissionData.admission_date);
         // Parse the admission date - handle potential timezone issues
         const admissionDateTime = new Date(admissionData.admission_date);
         console.log('🕰️ Parsed admission DateTime object:', admissionDateTime);
-        
+
         // Use local date formatting to avoid timezone shifts
         const year = admissionDateTime.getFullYear();
         const month = String(admissionDateTime.getMonth() + 1).padStart(2, '0');
         const day = String(admissionDateTime.getDate()).padStart(2, '0');
         admissionDate = `${year}-${month}-${day}`;
-        
-        admissionTime = admissionDateTime.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
+
+        admissionTime = admissionDateTime.toLocaleTimeString('en-US', {
+          hour: '2-digit',
           minute: '2-digit',
-          hour12: true 
+          hour12: true
         });
         console.log('🕰️ Formatted admission date/time:', { admissionDate, admissionTime });
         console.log('✅ Using patient admission date/time:', { admissionDate, admissionTime });
@@ -236,12 +236,12 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
         admissionTime = getCurrentTime12Hour();
         console.log('⚠️ No admission data found, using current date/time:', { admissionDate, admissionTime });
       }
-      
+
       // For signature dates, use current date/time (when form is being filled)
       const now = new Date();
       const today = now.toISOString().split('T')[0];
       const currentTime12Hour = getCurrentTime12Hour();
-      
+
       setFormData(prev => ({
         ...prev,
         patientName: `${patient.first_name} ${patient.last_name}`,
@@ -259,7 +259,7 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
         relativeSignatureDate: today,
         relativeSignatureTime: currentTime12Hour
       }));
-      
+
       console.log('✅ Form data set with values:', {
         patientName: `${patient.first_name} ${patient.last_name}`,
         patientId: patient.patient_id,
@@ -278,7 +278,7 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     // Basic validation
     if (!formData.patientName || !formData.patientId) {
       toast.error('Please fill in all required patient information');
@@ -290,15 +290,15 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
       ...formData,
       submittedAt: new Date().toISOString(),
       bedNumber
-    });
-    
+    }, patient);
+
     toast.success('Consent form submitted successfully');
   };
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank', 'width=800,height=600');
     const printContent = document.getElementById('consent-form-content');
-    
+
     if (printWindow && printContent) {
       printWindow.document.write(`
         <!DOCTYPE html>
@@ -528,7 +528,7 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
         </body>
         </html>
       `);
-      
+
       printWindow.document.close();
       printWindow.focus();
       setTimeout(() => {
@@ -540,7 +540,7 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
 
   const generatePrintContent = () => {
     // Get consent point 1 text for selected language
-    const consentPoint1Text = selectedLanguage === 'hindi' 
+    const consentPoint1Text = selectedLanguage === 'hindi'
       ? `मैं, <span class="field-value">${formData.consentName1 || ''}</span>, निवासी <span class="field-value">${formData.patientAddress || ''}</span>, अपने/रोगी के वैलेंट हॉस्पिटल, उदयपुर में दिनांक <span class="field-value">${formData.admissionDate || ''}</span> को समय <span class="field-value">${formData.admissionTime || ''}</span> पर भर्ती होने की सहमति देता/देती हूं।`
       : `I, <span class="field-value">${formData.consentName1 || ''}</span>, of <span class="field-value">${formData.patientAddress || ''}</span>, give my consent for my own/the patient's admission to Sevasangraha Hospital, Udaipur, on <span class="field-value">${formData.admissionDate || ''}</span> at <span class="field-value">${formData.admissionTime || ''}</span>.`;
 
@@ -1022,21 +1022,19 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
             <div className="flex gap-2">
               <button
                 onClick={() => setSelectedLanguage('english')}
-                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                  selectedLanguage === 'english' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${selectedLanguage === 'english'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
               >
                 English
               </button>
               <button
                 onClick={() => setSelectedLanguage('hindi')}
-                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                  selectedLanguage === 'hindi' 
-                    ? 'bg-blue-600 text-white' 
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className={`px-3 py-1 rounded text-sm font-medium transition-colors ${selectedLanguage === 'hindi'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
               >
                 हिंदी
               </button>
@@ -1343,10 +1341,10 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
                   placeholder="Please specify the reason..."
                 />
               </div>
-              
+
               <div className="mb-4 print-consent-text">
                 <p className="text-gray-800 mb-3">
-                  Therefore, I, 
+                  Therefore, I,
                   <input
                     type="text"
                     name="relativeName"
@@ -1354,7 +1352,7 @@ const IPDConsentForm: React.FC<IPDConsentFormProps> = ({
                     onChange={handleInputChange}
                     placeholder="Name"
                     className="inline-block mx-1 px-2 py-1 border-b border-gray-400 focus:outline-none focus:border-blue-500 bg-transparent min-w-[150px]"
-                  />, 
+                  />,
                   (
                   <input
                     type="text"

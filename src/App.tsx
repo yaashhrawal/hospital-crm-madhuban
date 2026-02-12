@@ -5,7 +5,7 @@ import { logger } from './utils/logger';
 import HospitalService from './services/hospitalService';
 import EmailService from './services/emailService';
 import { ExactDateService } from './services/exactDateService';
-import type { User } from './config/supabaseNew';
+import type { User, PatientWithRelations } from './config/supabaseNew';
 import { useAuth } from './contexts/AuthContext';
 import {
   loadGoogleDriveAPI,
@@ -54,6 +54,12 @@ const App: React.FC = () => {
   // Simple console initialization
   useEffect(() => {
     console.log('✅ App initialized');
+
+    // Initialize LocalStorage Data (Emergency Fallback)
+    import('./services/localStorageService').then(({ default: localStorageService }) => {
+      console.log('💾 Initializing LocalStorage Service (Fallback Mode)...');
+      localStorageService.initializeDefaultData();
+    });
 
     // Create global email sender function for popup windows
     // This MUST return the promise itself, not be an async function
@@ -104,6 +110,7 @@ const App: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   // const [showTriggerFix, setShowTriggerFix] = useState(false);
   const [showDebugger, setShowDebugger] = useState(false);
+  const [pendingIPDAdmission, setPendingIPDAdmission] = useState<PatientWithRelations | null>(null);
 
   // Removed trigger fix logic - issue is in backend code
 
@@ -970,7 +977,22 @@ const App: React.FC = () => {
     if (activeTab === 'dashboard') {
       return <EnhancedDashboard onNavigate={setActiveTab} />;
     } else if (activeTab === 'patient-list') {
-      return <ComprehensivePatientList onNavigate={setActiveTab} />;
+      return (
+        <ComprehensivePatientList
+          onNavigate={setActiveTab}
+          onShiftToIPD={(patient) => {
+            setPendingIPDAdmission(patient);
+            setActiveTab('ipd-beds');
+          }}
+        />
+      );
+    } else if (activeTab === 'ipd-beds') {
+      return (
+        <IPDBedManagement
+          pendingPatient={pendingIPDAdmission}
+          onClearPendingPatient={() => setPendingIPDAdmission(null)}
+        />
+      );
     } else if (activeTab === 'operations') {
       return <OperationsLedger onNavigate={setActiveTab} />;
     } else if (activeTab === 'audit-log') {

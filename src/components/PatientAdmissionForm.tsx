@@ -35,6 +35,15 @@ interface FormData {
   aadharNo: string;
   fullAddress: string;
 
+  // Attendant Information [NEW]
+  attendantName: string;
+  attendantRelation: string;
+  attendantPhone: string;
+
+  // Insurance Details [NEW]
+  insuranceProvider: string;
+  policyNumber: string;
+
   // Advance Deposit Details
   depositDate: string;
   receiptNo: string;
@@ -90,6 +99,11 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
     contactNo: '',
     aadharNo: '',
     fullAddress: '',
+    attendantName: '',
+    attendantRelation: '',
+    attendantPhone: '',
+    insuranceProvider: '',
+    policyNumber: '',
     depositDate: new Date().toISOString().split('T')[0],
     receiptNo: '',
     receivedFrom: '',
@@ -117,23 +131,23 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
 
   // Auto-populate form with patient data when modal opens
   useEffect(() => {
-    console.log('🔍 PatientAdmissionForm Debug:', { 
-      isOpen, 
-      patient: patient ? { 
-        first_name: patient.first_name, 
-        last_name: patient.last_name, 
+    console.log('🔍 PatientAdmissionForm Debug:', {
+      isOpen,
+      patient: patient ? {
+        first_name: patient.first_name,
+        last_name: patient.last_name,
         patient_id: patient.patient_id,
         age: patient.age,
         gender: patient.gender,
         phone: patient.phone
-      } : null, 
-      ipdNumber, 
-      bedNumber 
+      } : null,
+      ipdNumber,
+      bedNumber
     });
-    
+
     if (isOpen && patient) {
       console.log('📝 Setting PatientAdmissionForm data with patient:', patient);
-      
+
       setFormData(prev => ({
         ...prev,
         patientId: patient.patient_id || '',
@@ -143,7 +157,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
         gender: patient.gender || '',
         contactNo: patient.phone || ''
       }));
-      
+
       console.log('✅ PatientAdmissionForm data set with values:', {
         patientId: patient.patient_id || '',
         ipNo: ipdNumber || '',
@@ -178,7 +192,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
           <div>
             <h2 className="text-2xl font-bold">PATIENT ADMISSION FORM</h2>
             <p className="text-blue-100 text-sm mt-1">
-              {patient && `Patient: ${formData.patientFullName}`} 
+              {patient && `Patient: ${formData.patientFullName}`}
               {bedNumber && ` | Bed: ${bedNumber}`}
             </p>
           </div>
@@ -204,7 +218,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
             <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2">
               📋 PATIENT'S DETAIL
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -353,7 +367,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
                 Type of Admission *
               </label>
               <div className="flex flex-wrap gap-4">
-                {['Cash', 'RGHS', 'TPA', 'Other'].map((type) => (
+                {['Emergency', 'Planned', 'Daycare', 'Transfer', 'Other'].map((type) => (
                   <label key={type} className="flex items-center">
                     <input
                       type="radio"
@@ -378,6 +392,80 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
               )}
             </div>
 
+            {/* Attendant Information Section */}
+            <div className="mt-8 border-t pt-6">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                👥 ATTENDANT INFORMATION
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Attendant Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.attendantName}
+                    onChange={(e) => handleInputChange('attendantName', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Relationship
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.attendantRelation}
+                    onChange={(e) => handleInputChange('attendantRelation', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Contact No.
+                  </label>
+                  <input
+                    type="tel"
+                    value={formData.attendantPhone}
+                    onChange={(e) => handleInputChange('attendantPhone', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Insurance Information Section */}
+            <div className="mt-8 border-t pt-6">
+              <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                🛡️ INSURANCE DETAILS
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Insurance Provider / TPA
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.insuranceProvider}
+                    onChange={(e) => handleInputChange('insuranceProvider', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g. HDFC Ergo, Paramount TPA"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Policy / Card Number
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.policyNumber}
+                    onChange={(e) => handleInputChange('policyNumber', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Full Address */}
             <div className="mt-6">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -398,7 +486,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
             <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2">
               💰 ADVANCE DEPOSIT DETAIL
             </h3>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -468,7 +556,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
               <h4 className="text-lg font-semibold text-gray-800 mb-4">
                 🚨 MEDICAL LEGAL CASE
               </h4>
-              
+
               {/* MLC Yes/No Selection */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -568,7 +656,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
             <h3 className="text-xl font-bold text-gray-800 mb-6 border-b pb-2">
               🏥 DISCHARGE DETAIL
             </h3>
-            
+
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -683,7 +771,7 @@ const PatientAdmissionForm: React.FC<PatientAdmissionFormProps> = ({
                   <h4 className="text-lg font-semibold text-red-800 mb-4">
                     ⚠️ EXPIRED PATIENTS
                   </h4>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-3">

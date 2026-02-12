@@ -22,6 +22,7 @@ export interface BedData {
   nurses_orders_data?: any;
   nurses_orders_submitted?: boolean;
   ipd_consents_data?: any;
+  daily_rate?: number;
   created_at?: string;
   updated_at?: string;
   // Include patient data when loaded
@@ -36,6 +37,21 @@ export interface IPDCounter {
   updated_at: string;
 }
 
+// Interface for comprehensive admission data
+export interface AdmissionData {
+  admission_type: string;
+  attendant_name: string;
+  attendant_relation: string;
+  attendant_phone: string;
+  insurance_provider: string;
+  policy_number: string;
+  // Standard fields
+  admission_date?: string;
+  treating_doctor?: string;
+  history_present_illness?: string;
+  advance_amount?: number; // New field for advance payment
+}
+
 class BedService {
   private getHeaders() {
     const token = localStorage.getItem('auth_token');
@@ -43,14 +59,14 @@ class BedService {
   }
 
   private getBaseUrl() {
-    return import.meta.env.VITE_API_URL || 'http://localhost:3002';
+    return import.meta.env.VITE_API_URL || 'http://localhost:3001';
   }
 
   // Get all beds with patient information
   async getAllBeds(): Promise<BedData[]> {
     try {
       console.log('🔍 BedService: Starting getAllBeds query...');
-      
+
       const response = await axios.get(`${this.getBaseUrl()}/api/beds`, {
         headers: this.getHeaders()
       });
@@ -94,17 +110,20 @@ class BedService {
     }
   }
 
+  // Interface for comprehensive admission data
+
+
   // Admit patient to bed
   async admitPatientToBed(
-    bedId: string, 
-    patient: PatientWithRelations, 
-    admissionDate?: string
+    bedId: string,
+    patient: PatientWithRelations,
+    admissionData?: AdmissionData // Changed to object for better scalability
   ): Promise<BedData> {
     try {
       // Generate IPD number
       const ipdNumber = await this.getNextIPDNumber();
-      
-      const admissionDateToUse = admissionDate || new Date().toISOString();
+
+      const admissionDateToUse = admissionData?.admission_date || new Date().toISOString();
 
       // Get bed details first
       const bedData = await this.getBedById(bedId);
@@ -115,11 +134,25 @@ class BedService {
         {
           patient_id: patient.id,
           bed_id: bedId,
-          bed_number: bedData?.bed_number ? parseInt(bedData.bed_number) : 1,
-          room_type: bedData?.room_type || 'GENERAL',
+          bed_number: bedData?.bed_number || '1',
+          room_type: (bedData?.room_type || 'general').toLowerCase(),
           department: patient.assigned_department || 'GENERAL',
+          daily_rate: bedData?.daily_rate || 0,
+          status: 'ADMITTED',
+
+          // New consolidated fields
           admission_date: admissionDateToUse,
-          status: 'ADMITTED'
+          treating_doctor: admissionData?.treating_doctor || (patient as any).assigned_doctor_id || null,
+          history_present_illness: admissionData?.history_present_illness || '',
+
+          // Enhanced fields
+          admission_type: admissionData?.admission_type || 'Planned',
+          attendant_name: admissionData?.attendant_name || '',
+          attendant_relation: admissionData?.attendant_relation || '',
+          attendant_phone: admissionData?.attendant_phone || '',
+          insurance_provider: admissionData?.insurance_provider || '',
+          policy_number: admissionData?.policy_number || '',
+          advance_amount: admissionData?.advance_amount || 0
         },
         { headers: this.getHeaders() }
       );
@@ -212,7 +245,7 @@ class BedService {
   subscribeToBedsChanges(callback: (payload: any) => void) {
     console.warn('⚠️ Real-time subscriptions not supported with REST API');
     console.log('💡 Consider implementing polling or WebSocket connections');
-    
+
     // Return a dummy subscription object
     return {
       unsubscribe: () => console.log('Dummy subscription unsubscribed')

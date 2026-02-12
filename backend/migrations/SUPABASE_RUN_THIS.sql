@@ -48,7 +48,12 @@ ALTER TABLE patient_transactions DROP CONSTRAINT IF EXISTS patient_transactions_
 ALTER TABLE patient_transactions ADD CONSTRAINT patient_transactions_payment_mode_check 
   CHECK (payment_mode IN ('cash', 'online', 'card', 'upi', 'insurance', 'adjustment', 'rghs', 'cheque', 'bank_transfer', 'neft', 'rtgs', 'CASH', 'ONLINE', 'CARD', 'UPI', 'INSURANCE', 'CREDIT', 'DEBIT'));
 
--- 5. Add missing columns to other tables
+-- 5. CRITICAL: Drop and recreate transaction_type constraint to include deposit types
+ALTER TABLE patient_transactions DROP CONSTRAINT IF EXISTS patient_transactions_transaction_type_check;
+ALTER TABLE patient_transactions ADD CONSTRAINT patient_transactions_transaction_type_check 
+  CHECK (transaction_type IN ('entry_fee', 'consultation', 'service', 'admission', 'medicine', 'discount', 'refund', 'procedure', 'lab_test', 'imaging', 'deposit', 'DEPOSIT', 'advance', 'ADVANCE'));
+
+-- 6. Add missing columns to other tables
 ALTER TABLE patients
 ADD COLUMN IF NOT EXISTS hospital_id UUID;
 

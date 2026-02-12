@@ -1381,7 +1381,7 @@ const NewIPDBillingModule: React.FC = () => {
       const transactionData = {
         patient_id: selectedPatient.id,
         hospital_id: HOSPITAL_ID,
-        transaction_type: 'ADMISSION_FEE',
+        transaction_type: 'admission', // FIXED: Use lowercase 'admission' to match DB constraint
         description: `IPD Advance Payment - Receipt: ${uniqueReceiptNo}${referenceNo ? ` - Ref: ${referenceNo}` : ''}`,
         amount: amount,
         payment_mode: newPaymentMode.toLowerCase(), // FIXED: Use lowercase to match DB constraint

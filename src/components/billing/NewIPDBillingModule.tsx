@@ -8,6 +8,7 @@ import { MEDICAL_SERVICES_DATA, searchServices, type MedicalService } from '../.
 import { logger } from '../../utils/logger';
 import BillingService, { type IPDBill } from '../../services/billingService';
 import { RGHS_PACKAGES_DATA, type RGHSPackage } from '../../data/rghsPackages';
+import { HOSPITAL_SERVICES_DATA, HOSPITAL_PROCEDURES_DATA, type HospitalService as HospitalServiceType, type HospitalProcedure } from '../../data/hospitalServicesAndProcedures';
 
 interface BillingRow {
   id: string;
@@ -214,8 +215,7 @@ const NewIPDBillingModule: React.FC = () => {
   // Debug: Track state changes
   useEffect(() => {
   }, [ipdBills]);
-  const [serviceSearchTerm, setServiceSearchTerm] = useState('');
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+
   const [customServiceName, setCustomServiceName] = useState('');
   const [customServiceAmount, setCustomServiceAmount] = useState('');
   const [availableServices, setAvailableServices] = useState<MedicalService[]>(MEDICAL_SERVICES_DATA);
@@ -225,6 +225,16 @@ const NewIPDBillingModule: React.FC = () => {
   const [packageSearchTerm, setPackageSearchTerm] = useState('');
   const [showPackageDropdown, setShowPackageDropdown] = useState(false);
   const [rghsPackages, setRghsPackages] = useState<RGHSPackage[]>(RGHS_PACKAGES_DATA);
+
+  // Hospital Services & Procedures State
+  const [hospitalServices] = useState<HospitalServiceType[]>(HOSPITAL_SERVICES_DATA);
+  const [hospitalProcedures] = useState<HospitalProcedure[]>(HOSPITAL_PROCEDURES_DATA);
+  const [selectedService, setSelectedService] = useState<HospitalServiceType | null>(null);
+  const [selectedProcedure, setSelectedProcedure] = useState<HospitalProcedure | null>(null);
+  const [serviceSearchTerm, setServiceSearchTerm] = useState('');
+  const [procedureSearchTerm, setProcedureSearchTerm] = useState('');
+  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
+  const [showProcedureDropdown, setShowProcedureDropdown] = useState(false);
 
   // Stay Segment Management
   const [_staySegments, _setStaySegments] = useState([{
@@ -706,6 +716,55 @@ const NewIPDBillingModule: React.FC = () => {
       toast.error('Failed to add custom service');
     }
   };
+
+  // Handler for adding predefined hospital service
+  const addHospitalService = (service: HospitalServiceType) => {
+    const newSelectedService = {
+      id: `service-${Date.now()}`,
+      name: service.service_name,
+      amount: service.rate,
+      quantity: 1,
+      selected: true
+    };
+
+    setSelectedServices([...selectedServices, newSelectedService]);
+    setServiceSearchTerm('');
+    setShowServiceDropdown(false);
+    setSelectedService(null);
+    toast.success(`${service.service_name} added to bill!`);
+  };
+
+  // Handler for adding predefined hospital procedure
+  const addHospitalProcedure = (procedure: HospitalProcedure) => {
+    const newSelectedService = {
+      id: `procedure-${Date.now()}`,
+      name: procedure.procedure_name,
+      amount: procedure.rate,
+      quantity: 1,
+      selected: true
+    };
+
+    setSelectedServices([...selectedServices, newSelectedService]);
+    setProcedureSearchTerm('');
+    setShowProcedureDropdown(false);
+    setSelectedProcedure(null);
+    toast.success(`${procedure.procedure_name} added to bill!`);
+  };
+
+  // Filter services based on search term
+  const filteredServices = hospitalServices.filter(service =>
+    service.service_name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) ||
+    service.service_code.toLowerCase().includes(serviceSearchTerm.toLowerCase()) ||
+    service.category.toLowerCase().includes(serviceSearchTerm.toLowerCase())
+  );
+
+  // Filter procedures based on search term
+  const filteredProcedures = hospitalProcedures.filter(procedure =>
+    procedure.procedure_name.toLowerCase().includes(procedureSearchTerm.toLowerCase()) ||
+    procedure.procedure_code.toLowerCase().includes(procedureSearchTerm.toLowerCase()) ||
+    procedure.category.toLowerCase().includes(procedureSearchTerm.toLowerCase())
+  );
+
 
   const calculateSelectedServicesTotal = () => {
     return selectedServices
@@ -3899,13 +3958,13 @@ const NewIPDBillingModule: React.FC = () => {
                         </div>
                       ) : (
                         <div className="relative">
-                          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-orange-500">
-                            <div className="pl-3 py-2 bg-gray-50 border-r border-gray-300">
-                              <Search className="h-4 w-4 text-gray-500" />
+                          <div className="flex items-center border border-orange-300 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-orange-500">
+                            <div className="pl-3 py-2 bg-gray-50 border-r border-orange-300">
+                              <Search className="h-4 w-4 text-orange-400" />
                             </div>
                             <input
                               type="text"
-                              placeholder="Search for RGHS packages by name or code..."
+                              placeholder="Search or select RGHS package..."
                               value={packageSearchTerm}
                               onChange={(e) => {
                                 setPackageSearchTerm(e.target.value);
@@ -3914,40 +3973,87 @@ const NewIPDBillingModule: React.FC = () => {
                               onFocus={() => setShowPackageDropdown(true)}
                               className="flex-1 px-3 py-2 outline-none"
                             />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowPackageDropdown(!showPackageDropdown);
+                                setPackageSearchTerm('');
+                              }}
+                              className="px-3 py-2 bg-orange-50 border-l border-orange-300 hover:bg-orange-100 transition-colors"
+                            >
+                              <svg className={`h-4 w-4 text-orange-600 transition-transform ${showPackageDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
                           </div>
 
-                          {showPackageDropdown && packageSearchTerm && (
-                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                              {rghsPackages
-                                .filter(pkg =>
-                                  pkg.name.toLowerCase().includes(packageSearchTerm.toLowerCase()) ||
-                                  pkg.code.toLowerCase().includes(packageSearchTerm.toLowerCase())
-                                )
-                                .map(pkg => (
-                                  <div
-                                    key={pkg.id}
-                                    onClick={() => {
-                                      setSelectedPackage(pkg);
-                                      setPackageSearchTerm('');
-                                      setShowPackageDropdown(false);
-                                      // Optional: Set billing amount to package rate automatically?
-                                      // For now, allow manual adjustment or keep strict
-                                    }}
-                                    className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b last:border-b-0 border-gray-100"
-                                  >
-                                    <div className="flex justify-between items-center">
-                                      <div>
-                                        <div className="font-medium text-gray-800">{pkg.name}</div>
-                                        <div className="text-xs text-gray-500 mt-0.5">{pkg.code} • {pkg.category}</div>
+                          {showPackageDropdown && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-orange-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                              {packageSearchTerm.length === 0 ? (
+                                <>
+                                  <div className="p-2 bg-orange-50 border-b border-orange-200">
+                                    <div className="text-xs font-medium text-orange-700">All RGHS Packages ({rghsPackages.length})</div>
+                                  </div>
+                                  {rghsPackages.map(pkg => (
+                                    <div
+                                      key={pkg.id}
+                                      onClick={() => {
+                                        setSelectedPackage(pkg);
+                                        setPackageSearchTerm('');
+                                        setShowPackageDropdown(false);
+                                      }}
+                                      className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b last:border-b-0 border-gray-100"
+                                    >
+                                      <div className="flex justify-between items-center">
+                                        <div>
+                                          <div className="font-medium text-gray-800">{pkg.name}</div>
+                                          <div className="text-xs text-gray-500 mt-0.5">{pkg.code} • {pkg.category}</div>
+                                        </div>
+                                        <div className="font-semibold text-orange-600">₹{pkg.rate.toLocaleString()}</div>
                                       </div>
-                                      <div className="font-semibold text-orange-600">₹{pkg.rate.toLocaleString()}</div>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : (
+                                <>
+                                  <div className="p-2 bg-orange-50 border-b border-orange-200">
+                                    <div className="text-xs font-medium text-orange-700">
+                                      Search Results ({rghsPackages.filter(pkg =>
+                                        pkg.name.toLowerCase().includes(packageSearchTerm.toLowerCase()) ||
+                                        pkg.code.toLowerCase().includes(packageSearchTerm.toLowerCase())
+                                      ).length})
                                     </div>
                                   </div>
-                                ))}
+                                  {rghsPackages
+                                    .filter(pkg =>
+                                      pkg.name.toLowerCase().includes(packageSearchTerm.toLowerCase()) ||
+                                      pkg.code.toLowerCase().includes(packageSearchTerm.toLowerCase())
+                                    )
+                                    .map(pkg => (
+                                      <div
+                                        key={pkg.id}
+                                        onClick={() => {
+                                          setSelectedPackage(pkg);
+                                          setPackageSearchTerm('');
+                                          setShowPackageDropdown(false);
+                                        }}
+                                        className="px-4 py-3 hover:bg-orange-50 cursor-pointer border-b last:border-b-0 border-gray-100"
+                                      >
+                                        <div className="flex justify-between items-center">
+                                          <div>
+                                            <div className="font-medium text-gray-800">{pkg.name}</div>
+                                            <div className="text-xs text-gray-500 mt-0.5">{pkg.code} • {pkg.category}</div>
+                                          </div>
+                                          <div className="font-semibold text-orange-600">₹{pkg.rate.toLocaleString()}</div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                </>
+                              )}
                             </div>
                           )}
 
-                          {/* Close dropdown on outside click would be handled by a global listener or overlay */}
+                          {/* Close dropdown on outside click */}
                           {showPackageDropdown && (
                             <div className="fixed inset-0 z-0 bg-transparent" onClick={() => setShowPackageDropdown(false)}></div>
                           )}
@@ -3965,49 +4071,87 @@ const NewIPDBillingModule: React.FC = () => {
                         </h5>
                       </div>
 
-                      {/* Service Search Dropdown */}
+                      {/* Service Dropdown with Arrow */}
                       <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Add Service</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Add Hospital Service</label>
                         <div className="relative">
-                          <input
-                            type="text"
-                            placeholder="Search and select services (Radiology, Laboratory, Procedures, etc.)..."
-                            value={serviceSearchTerm}
-                            onChange={(e) => {
-                              setServiceSearchTerm(e.target.value);
-                              setShowServiceDropdown(true);
-                            }}
-                            onFocus={() => setShowServiceDropdown(true)}
-                            className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 pl-10"
-                          />
-                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-purple-400 h-4 w-4" />
+                          <div className="flex items-center border border-purple-300 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-purple-500">
+                            <div className="pl-3 py-2 bg-gray-50 border-r border-purple-300">
+                              <Search className="h-4 w-4 text-purple-400" />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Search or select a service..."
+                              value={serviceSearchTerm}
+                              onChange={(e) => {
+                                setServiceSearchTerm(e.target.value);
+                                setShowServiceDropdown(true);
+                              }}
+                              onFocus={() => setShowServiceDropdown(true)}
+                              className="flex-1 px-3 py-2 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowServiceDropdown(!showServiceDropdown);
+                                setServiceSearchTerm('');
+                              }}
+                              className="px-3 py-2 bg-purple-50 border-l border-purple-300 hover:bg-purple-100 transition-colors"
+                            >
+                              <svg className={`h-4 w-4 text-purple-600 transition-transform ${showServiceDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                          </div>
 
                           {/* Services Dropdown */}
                           {showServiceDropdown && (
                             <div className="absolute z-10 w-full mt-1 bg-white border border-purple-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
                               {serviceSearchTerm.length === 0 ? (
-                                <div className="p-3 text-sm text-gray-500">
-                                  Start typing to search services or browse by category below...
-                                </div>
-                              ) : filteredAvailableServices.length > 0 ? (
-                                filteredAvailableServices.map((service) => (
-                                  <div
-                                    key={service.id}
-                                    onClick={() => addServiceFromDropdown(service)}
-                                    className="px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex-1">
-                                        <div className="text-sm font-medium text-gray-800">{service.name}</div>
-                                        <div className="text-xs text-gray-500">{service.category} • {service.department}</div>
-                                        {service.description && (
-                                          <div className="text-xs text-gray-400 mt-1 truncate">{service.description}</div>
-                                        )}
-                                      </div>
-                                      <div className="text-sm font-semibold text-purple-600">₹{service.basePrice}</div>
-                                    </div>
+                                <>
+                                  <div className="p-2 bg-purple-50 border-b border-purple-200">
+                                    <div className="text-xs font-medium text-purple-700">All Services ({hospitalServices.length})</div>
                                   </div>
-                                ))
+                                  {hospitalServices.map((service) => (
+                                    <div
+                                      key={service.id}
+                                      onClick={() => addHospitalService(service)}
+                                      className="px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-800">{service.service_name}</div>
+                                          <div className="text-xs text-gray-500">{service.service_code} • {service.category}</div>
+                                        </div>
+                                        <div className="text-sm font-semibold text-purple-600">₹{service.rate.toLocaleString()}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : filteredServices.length > 0 ? (
+                                <>
+                                  <div className="p-2 bg-purple-50 border-b border-purple-200">
+                                    <div className="text-xs font-medium text-purple-700">Search Results ({filteredServices.length})</div>
+                                  </div>
+                                  {filteredServices.map((service) => (
+                                    <div
+                                      key={service.id}
+                                      onClick={() => addHospitalService(service)}
+                                      className="px-3 py-2 hover:bg-purple-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-800">{service.service_name}</div>
+                                          <div className="text-xs text-gray-500">{service.service_code} • {service.category}</div>
+                                          {service.description && (
+                                            <div className="text-xs text-gray-400 mt-1 truncate">{service.description}</div>
+                                          )}
+                                        </div>
+                                        <div className="text-sm font-semibold text-purple-600">₹{service.rate.toLocaleString()}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </>
                               ) : (
                                 <div className="p-3 text-sm text-gray-500">
                                   No services found matching "{serviceSearchTerm}"
@@ -4020,7 +4164,7 @@ const NewIPDBillingModule: React.FC = () => {
                                   <div className="p-2">
                                     <div className="text-xs font-medium text-gray-600 mb-2">Quick Categories:</div>
                                     <div className="flex flex-wrap gap-1">
-                                      {['RADIOLOGY', 'LABORATORY', 'CARDIOLOGY', 'PROCEDURES', 'PHYSIOTHERAPY', 'DENTAL'].map((category) => (
+                                      {['Radiology', 'Laboratory', 'General', 'Critical Care', 'Diagnostic'].map((category) => (
                                         <button
                                           key={category}
                                           onClick={() => setServiceSearchTerm(category.toLowerCase())}
@@ -4042,6 +4186,125 @@ const NewIPDBillingModule: React.FC = () => {
                           <div
                             className="fixed inset-0 z-5"
                             onClick={() => setShowServiceDropdown(false)}
+                          />
+                        )}
+                      </div>
+
+                      {/* Procedure Dropdown with Arrow */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Add Hospital Procedure</label>
+                        <div className="relative">
+                          <div className="flex items-center border border-blue-300 rounded-md overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                            <div className="pl-3 py-2 bg-gray-50 border-r border-blue-300">
+                              <Search className="h-4 w-4 text-blue-400" />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Search or select a procedure..."
+                              value={procedureSearchTerm}
+                              onChange={(e) => {
+                                setProcedureSearchTerm(e.target.value);
+                                setShowProcedureDropdown(true);
+                              }}
+                              onFocus={() => setShowProcedureDropdown(true)}
+                              className="flex-1 px-3 py-2 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowProcedureDropdown(!showProcedureDropdown);
+                                setProcedureSearchTerm('');
+                              }}
+                              className="px-3 py-2 bg-blue-50 border-l border-blue-300 hover:bg-blue-100 transition-colors"
+                            >
+                              <svg className={`h-4 w-4 text-blue-600 transition-transform ${showProcedureDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                          </div>
+
+                          {/* Procedures Dropdown */}
+                          {showProcedureDropdown && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-blue-300 rounded-md shadow-lg max-h-64 overflow-y-auto">
+                              {procedureSearchTerm.length === 0 ? (
+                                <>
+                                  <div className="p-2 bg-blue-50 border-b border-blue-200">
+                                    <div className="text-xs font-medium text-blue-700">All Procedures ({hospitalProcedures.length})</div>
+                                  </div>
+                                  {hospitalProcedures.map((procedure) => (
+                                    <div
+                                      key={procedure.id}
+                                      onClick={() => addHospitalProcedure(procedure)}
+                                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-800">{procedure.procedure_name}</div>
+                                          <div className="text-xs text-gray-500">{procedure.procedure_code} • {procedure.category}</div>
+                                        </div>
+                                        <div className="text-sm font-semibold text-blue-600">₹{procedure.rate.toLocaleString()}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : filteredProcedures.length > 0 ? (
+                                <>
+                                  <div className="p-2 bg-blue-50 border-b border-blue-200">
+                                    <div className="text-xs font-medium text-blue-700">Search Results ({filteredProcedures.length})</div>
+                                  </div>
+                                  {filteredProcedures.map((procedure) => (
+                                    <div
+                                      key={procedure.id}
+                                      onClick={() => addHospitalProcedure(procedure)}
+                                      className="px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                          <div className="text-sm font-medium text-gray-800">{procedure.procedure_name}</div>
+                                          <div className="text-xs text-gray-500">{procedure.procedure_code} • {procedure.category}</div>
+                                          {procedure.description && (
+                                            <div className="text-xs text-gray-400 mt-1 truncate">{procedure.description}</div>
+                                          )}
+                                        </div>
+                                        <div className="text-sm font-semibold text-blue-600">₹{procedure.rate.toLocaleString()}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : (
+                                <div className="p-3 text-sm text-gray-500">
+                                  No procedures found matching "{procedureSearchTerm}"
+                                </div>
+                              )}
+
+                              {/* Quick Categories */}
+                              {procedureSearchTerm.length === 0 && (
+                                <div className="border-t border-gray-200 bg-gray-50">
+                                  <div className="p-2">
+                                    <div className="text-xs font-medium text-gray-600 mb-2">Quick Categories:</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {['General Surgery', 'Orthopedics', 'Cardiology', 'Obstetrics', 'ENT', 'Ophthalmology'].map((category) => (
+                                        <button
+                                          key={category}
+                                          onClick={() => setProcedureSearchTerm(category.toLowerCase())}
+                                          className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-blue-50 hover:border-blue-300 transition-colors"
+                                        >
+                                          {category}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Click outside to close dropdown */}
+                        {showProcedureDropdown && (
+                          <div
+                            className="fixed inset-0 z-5"
+                            onClick={() => setShowProcedureDropdown(false)}
                           />
                         )}
                       </div>
